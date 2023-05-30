@@ -1,5 +1,6 @@
 namespace MyParser
 
+open System
 open Microsoft.FSharp.Core
 
 module Interpreter =
@@ -11,7 +12,7 @@ module Interpreter =
         | :? double as x -> MpFloat x
         | :? string as x -> MpString x
         | null -> MpNull
-        | x -> raise (System.NotSupportedException(x.ToString()))
+        | x -> raise (NotSupportedException(x.ToString()))
 
     /// Converts value to obj
     let toObj =
@@ -21,29 +22,32 @@ module Interpreter =
         | MpFloat x -> box x
         | MpString x -> box x
         | MpNull -> null
-        | MpArray x -> raise (System.NotSupportedException(x.ToString()))
+    // | MpArray x -> raise (System.NotSupportedException(x.ToString()))
 
     /// Converts value to int
     let toInt =
-        function
-        | MpBool _ -> raise (System.NotSupportedException())
-        | MpInt x -> x
-        | MpFloat x -> int x
-        | MpString x -> int x
-        | MpNull -> 0
-        | MpArray x -> raise (System.NotSupportedException(x.ToString()))
+        let f x =
+            match x with
+            | MpInt x -> x
+            | MpFloat x -> int x
+            | MpString x -> int x
+            | MpNull -> 0
+            | _ -> raise (NotSupportedException())
 
-    /// Converts value to bool
+        f
+
     let toBool =
-        function
-        | MpBool x -> x
-        | _ -> raise (System.NotSupportedException())
+        let f x =
+            match x with
+            | MpBool x -> x
+            | _ -> raise (NotSupportedException())
 
-    /// Converts value to array
+        f
+
     let toArray =
         function
         | MpArray x -> x
-        | _ -> raise (System.NotSupportedException())
+        | _ -> raise (NotSupportedException())
 
     /// Coerces a tuple of numeric values to double
     let (|AsFloats|_|) =
@@ -53,7 +57,6 @@ module Interpreter =
         | MpFloat l, MpInt r -> Some(l, float r)
         | _, _ -> None
 
-    /// Compares values
     let compare lhs rhs =
         match lhs, rhs with
         | MpBool l, MpBool r -> l.CompareTo(r)
@@ -72,11 +75,30 @@ module Interpreter =
 
         match expr with
         | MpLiteral x -> x
-        | MpVar identifier -> vars.[identifier]
-        | MpGetAt (Location (identifier, [ index ])) ->
-            let array = vars.[identifier] |> toArray
-            array.[eval state index]
-        | MpGetAt (Location (identifier, xs)) -> raise (System.NotSupportedException())
+        | MpVar identifier -> vars[identifier]
+        | MpArray a ->
+            let newA = Array.create a.Length MpNull
+
+            for i in 0 .. (a.Length - 1) do
+                let result = eval state a[i]
+                newA[i] <- result
+
+            MpArrayValue newA
+        | MpIndex (identifier, ind) ->
+            let value = vars[identifier]
+            let index = toInt (eval state ind)
+
+            match value with
+            | MpArrayValue v ->
+                if index < 0 || index >= v.Length then
+                    raise (System.IndexOutOfRangeException())
+
+                v[index]
+            | _ -> raise (NotSupportedException())
+        // | MpGetAt (Location (identifier, [ index ])) ->
+        //     let array = vars.[identifier] |> toArray
+        //     array.[eval state index]
+        // | MpGetAt (Location (identifier, xs)) -> raise (System.NotSupportedException())
         // | MpFunc (call) -> invoke state call
         | MpNeg x -> arithmetic (eval state x) MpMultiply (MpInt(-1))
         | MpArithmetic (l, op, r) -> arithmetic (eval state l) op (eval state r)
@@ -140,8 +162,26 @@ module Interpreter =
         let callStack = Stack<index>()
         /// Evaluates expression with variables
         let evalAux = eval variables
+
         /// Assigns variable with result of expression
-        let assign (Set (identifier, expr)) = variables.[identifier] <- evalAux expr
+        let assign (value: assign) =
+            match value with
+            | Set (identifier, expr) -> variables[identifier] <- evalAux expr
+            | SetE (identifier, expr) ->
+                match identifier with
+                | MpIndex (identifier, ind) ->
+                    let value = variables[identifier]
+                    let index = toInt (eval variables ind)
+
+                    match value with
+                    | MpArrayValue v ->
+                        if index < 0 || index >= v.Length then
+                            raise (IndexOutOfRangeException())
+
+                        v[index] <- (eval variables expr)
+                    | _ -> raise (NotSupportedException())
+                | _ -> raise (NotSupportedException())
+
 
         let print (value: value) =
             match value with

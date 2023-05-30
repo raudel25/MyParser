@@ -30,9 +30,11 @@ type value =
     | MpInt of int
     | MpFloat of float
     | MpString of string
-    | MpArray of Hashtable<value, value>
+    | MpArrayValue of value[]
 
 type expr =
+    | MpIndex of identifier * expr
+    | MpArray of expr[]
     | MpLiteral of value
     | MpVar of identifier
     | MpGetAt of location
@@ -48,7 +50,9 @@ and invoke =
     | MpMethod of string * string * expr[]
     | MpPropertyGet of string * string
 
-type assign = Set of identifier * expr
+type assign =
+    | Set of identifier * expr
+    | SetE of expr * expr
 
 type instruction =
     | MpPrint of expr
@@ -149,7 +153,7 @@ module Parser =
         let isIdentifierChar c = isLetter c || isDigit c || c = '_'
 
         let reservedWords =
-            [ "for"; "while"; "if"; "else"; "elif"; "func"; "print"; "true"; "false" ]
+            [ "for"; "while"; "if"; "else"; "elif"; "func"; "print"; "true"; "false";"array" ]
 
         let reservedWord = choice (reservedWords |> List.map pstring)
 
@@ -159,17 +163,38 @@ module Parser =
 
 
     let mpIdentifier_ws = mpIdentifier .>> ws
-    let mpVar = mpIdentifier |>> MpVar
 
-    let mpValue = mpNum <|> mpString <|> mpNull <|> mpVar
+    let mpVar: Parser<expr, unit> =
+        (notFollowedBy (mpIdentifier .>>. pstring "[") .>>. mpIdentifier)
+        |>> (fun (_, y) -> (MpVar y))
 
+    let mpValue = mpNum <|> mpString <|> mpNull <|> mpVar <|> mpBool
+
+    let mpValueA = mpNum <|> mpVar
+
+    let mpArrayL =
+        (between (pchar '[') (pchar ']') (sepBy (ws >>. mpValue .>> ws) (pchar ',')))
+        |>> List.toArray
+
+    let mpArrayV =
+        pipe5 (str_ws "array(") (mpValue .>> ws) (str_ws ",") (puint32 .>> ws) (pstring ")") (fun _ x _ y _ ->
+            Array.create (int y) x)
+
+    let mpArray = mpArrayL <|> mpArrayV |>> MpArray
 
     type Assoc = Associativity
 
     let oppA = OperatorPrecedenceParser<expr, unit, unit>()
-    let mpArithmetic = oppA.ExpressionParser
 
-    let termA = (mpValue .>> ws) <|> between (str_ws "(") (str_ws ")") mpArithmetic
+    let rec mpArithmetic = oppA.ExpressionParser
+
+    and mpIndex =
+        pipe4 mpIdentifier (str_ws "[") (mpArithmetic .>> ws) (pstring "]") (fun x _ y _ -> MpIndex(x, y))
+
+
+    let termA =
+        ((mpValueA <|> mpIndex) .>> ws)
+        <|> between (str_ws "(") (str_ws ")") mpArithmetic
 
     oppA.TermParser <- termA
     oppA.AddOperator(InfixOperator("+", ws, 1, Assoc.Left, (fun x y -> MpArithmetic(x, MpAdd, y))))
@@ -193,7 +218,7 @@ module Parser =
     let mpLogical = oppL.ExpressionParser
 
     let termL =
-        ((mpComparison <|> mpBool) .>> ws)
+        ((mpComparison <|> mpBool <|> mpVar) .>> ws)
         <|> between (str_ws "(") (str_ws ")") mpLogical
 
     oppL.TermParser <- termL
@@ -202,11 +227,16 @@ module Parser =
     oppL.AddOperator(InfixOperator("^^", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpXor, y))))
 
     let mpPrint =
-        pipe3 (str_ws "print(") (mpComparison <|> mpLogical <|> mpArithmetic) (pstring ")") (fun _ e _ -> MpPrint e)
+        pipe3 (str_ws "print(") (mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray) (pstring ")") (fun _ e _ ->
+            MpPrint e)
 
     let mpAssign =
-        pipe3 mpIdentifier_ws (str_ws "=") (mpComparison <|> mpLogical <|> mpArithmetic) (fun id _ e ->
+        pipe3 mpIdentifier (str_ws "=") (mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray) (fun id _ e ->
             MpAssign(Set(id, e)))
+
+    let mpAssignE =
+        pipe3 (mpIndex .>> ws) (str_ws "=") (mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray) (fun id _ e ->
+            MpAssign(SetE(id, e)))
 
     let mpRange =
         pipe5 pint32 (str_ws ",") pint32 (str_ws ",") pint32 (fun x _ y _ z -> (x, y, z))
@@ -228,7 +258,7 @@ module Parser =
 
 
     let mpEnd: Parser<instruction, unit> = pstring "}" |>> (fun _ -> MpEnd)
-    let mpInstruct = [ mpAssign; mpPrint ] |> List.map attempt |> choice
+    let mpInstruct = [ mpAssign; mpAssignE; mpPrint ] |> List.map attempt |> choice
 
     let mpBlockInstruct =
         [ mpWhile; mpFor; mpEnd; mpIf; mpElIf; mpElse ] |> List.map attempt |> choice
