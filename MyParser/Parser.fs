@@ -59,7 +59,7 @@ type instruction =
     | MpFor of identifier * int * int * int
     | MpEndFor
     | MpIf of expr
-    | MpElseIf of expr
+    | MpElIf of expr
     | MpElse
     | MpEndIf
     | MpWhile of expr
@@ -218,9 +218,20 @@ module Parser =
         pipe5 (str_ws "for") mpIdentifier_ws (str_ws "in") mpRange (wsl >>. pstring "{") (fun _ s _ (x, y, z) _ ->
             MpFor(s, x, y, z))
 
+    let mpIf =
+        pipe5 (str_ws "if") (str_ws "(") mpLogical (str_wsl ")") (pstring "{") (fun _ _ e _ _ -> MpIf e)
+
+    let mpElIf =
+        pipe5 (str_ws "elif") (str_ws "(") mpLogical (str_wsl ")") (pstring "{") (fun _ _ e _ _ -> MpElIf e)
+
+    let mpElse = pipe2 (str_wsl "else") (pstring "{") (fun _ _ -> MpElse)
+
+
     let mpEnd: Parser<instruction, unit> = pstring "}" |>> (fun _ -> MpEnd)
     let mpInstruct = [ mpAssign; mpPrint ] |> List.map attempt |> choice
-    let mpBlockInstruct = [ mpWhile; mpFor; mpEnd ] |> List.map attempt |> choice
+
+    let mpBlockInstruct =
+        [ mpWhile; mpFor; mpEnd; mpIf; mpElIf; mpElse ] |> List.map attempt |> choice
 
     type Line =
         | Blank

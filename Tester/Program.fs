@@ -16,4 +16,4 @@ match result with
 | Some x -> printfn "Parsed %A" x
 | None -> printfn "Failed to parse"
 
-mpRun (mpParse "for a in 0,2,-1 { print(\"a\");}")
+mpRun (mpParse "if(false){  if(true){ print(1); } } elif (true) {print(2);}")

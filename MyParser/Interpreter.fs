@@ -177,38 +177,34 @@ module Interpreter =
         let initBlock instruction =
             match instruction with
             | MpWhile _ -> true
+            | MpFor _ -> true
+            | MpIf _ -> true
+            | MpElIf _ -> true
+            | MpElse -> true
             | _ -> false
 
         let endBlock instruction =
             match instruction with
             | MpEnd -> true
             | _ -> false
-
-
-        let findFirstIndex start (inc, dec) isMatch =
-            let mutable i = start
-            let mutable nest = 0
-
-            while nest > 0 || isMatch program.[i] |> not do
-                if inc program.[i] then
-                    nest <- nest + 1
-
-                if nest > 0 && dec program.[i] then
-                    nest <- nest - 1
-
-                i <- i + 1
-
-            i
-
-        /// Finds index of instruction
-        let rec findIndex ind cant =
+            
+        let rec findEndBlock ind cant =
             if initBlock program[ind] then
                 incr cant
 
             if endBlock program[ind] then
                 decr cant
 
-            if cant = ref 0 then ind else findIndex (ind + 1) cant
+            if cant = ref 0 then ind else findEndBlock (ind + 1) cant
+
+        let rec findStartBlock ind cant =
+            if initBlock program[ind] then
+                decr cant
+
+            if endBlock program[ind] then
+                incr cant
+
+            if cant = ref 0 then ind else findStartBlock (ind - 1) cant
 
 
         // let isIf =
@@ -250,33 +246,63 @@ module Interpreter =
             // | SetAt (Location (identifier, [ index ]), expr) -> setAt (identifier, index, expr)
             // | SetAt (_) -> raise (System.NotImplementedException())
             // | Action (call) -> invoke variables call |> ignore
-            // | If (condition)
-            // | ElseIf (condition) ->
-            //     if eval condition |> toBool |> not then
-            //         let isMatch x = isElseIf x || isElse x || isEndIf x
-            //         let index = findFirstIndex (!pi + 1) (isIf, isEndIf) isMatch
-            //         pi := if program.[index] |> isElseIf then index - 1 else index
-            // | Else ->
-            //     let index = findIndex !pi (isIf, isEndIf) EndIf
-            //     pi := index
-            // | EndIf -> ()
+            | MpIf cond ->
+                let condition = toBool (evalAux cond)
+
+                if not condition then
+                    let index = findEndBlock (!pi + 1) (ref 1)
+                    pi := index
+
+            | MpElse ->
+                let indexStart=findStartBlock (!pi-1) (ref 0)
+                
+                match program[indexStart] with
+                | MpIf cond->
+                    let condition = toBool (evalAux cond)
+
+                    if condition then
+                        let indexEnd = findEndBlock (!pi + 1) (ref 1)
+                        pi := indexEnd
+                | MpElIf cond->
+                    let condition = toBool (evalAux cond)
+
+                    if condition then
+                        let indexEnd = findEndBlock (!pi + 1) (ref 1)
+                        pi := indexEnd
+                | _ -> raise(System.NotSupportedException())
+            
+            | MpElIf condEl ->
+                let indexStart=findStartBlock (!pi-1) (ref 0)
+                
+                match program[indexStart] with
+                | MpIf condIf->
+                    let conditionIf = toBool (evalAux condIf)
+                    let conditionEl = toBool (evalAux condEl)
+
+                    if (conditionIf || not conditionEl) then
+                        let indexEnd = findEndBlock (!pi + 1) (ref 1)
+                        pi := indexEnd
+                | MpElIf condIf->
+                    let conditionIf = toBool (evalAux condIf)
+                    let conditionEl = toBool (evalAux condEl)
+
+                    if (conditionIf || not conditionEl) then
+                        let indexEnd = findEndBlock (!pi + 1) (ref 1)
+                        pi := indexEnd
+                | _ -> raise(System.NotSupportedException())
+
+
+
             | MpFor (identifier, init, stop, step) ->
                 assign (Set(identifier, MpLiteral(MpInt init)))
 
-                let index = findIndex (!pi + 1) (ref 1)
+                let index = findEndBlock (!pi + 1) (ref 1)
                 forLoops.[index] <- (!pi, identifier, stop, MpInt step)
 
                 if toInt (variables.[identifier]) >= stop then
                     pi := index
-            // | EndFor ->
-            //     let start, identifier, target, step = forLoops.[!pi]
-            //     let x = variables.[identifier]
-            //     variables.[identifier] <- arithmetic x Add (eval step)
-            //
-            //     if toInt (variables.[identifier]) <= toInt (eval target) then
-            //         pi := start
             | MpWhile condition ->
-                let index = findIndex (!pi + 1) (ref 1)
+                let index = findEndBlock (!pi + 1) (ref 1)
                 whileLoops.[index] <- !pi
 
                 if evalAux condition |> toBool |> not then
