@@ -14,17 +14,19 @@ module Interpreter =
         | null -> MpNull
         | x -> raise (NotSupportedException(x.ToString()))
 
-    /// Converts value to obj
-    let toObj =
-        function
-        | MpBool x -> box x
-        | MpInt x -> box x
-        | MpFloat x -> box x
-        | MpString x -> box x
-        | MpNull -> null
-    // | MpArray x -> raise (System.NotSupportedException(x.ToString()))
 
-    /// Converts value to int
+    let toObj =
+        let f x =
+            match x with
+            | MpBool x -> box x
+            | MpInt x -> box x
+            | MpFloat x -> box x
+            | MpString x -> box x
+            | MpNull -> null
+            | MpArrayValue _ -> raise (NotSupportedException())
+
+        f
+
     let toInt =
         let f x =
             match x with
@@ -63,7 +65,7 @@ module Interpreter =
         | MpInt l, MpInt r -> l.CompareTo(r)
         | AsFloats (l, r) -> l.CompareTo(r)
         | MpString l, MpString r -> l.CompareTo(r)
-        | _ -> raise (System.NotSupportedException $"%A{lhs} %A{rhs}")
+        | _ -> raise (NotSupportedException $"%A{lhs} %A{rhs}")
 
     open System.Collections.Generic
 
@@ -91,15 +93,10 @@ module Interpreter =
             match value with
             | MpArrayValue v ->
                 if index < 0 || index >= v.Length then
-                    raise (System.IndexOutOfRangeException())
+                    raise (IndexOutOfRangeException())
 
                 v[index]
             | _ -> raise (NotSupportedException())
-        // | MpGetAt (Location (identifier, [ index ])) ->
-        //     let array = vars.[identifier] |> toArray
-        //     array.[eval state index]
-        // | MpGetAt (Location (identifier, xs)) -> raise (System.NotSupportedException())
-        // | MpFunc (call) -> invoke state call
         | MpNeg x -> arithmetic (eval state x) MpMultiply (MpInt(-1))
         | MpArithmetic (l, op, r) -> arithmetic (eval state l) op (eval state r)
         | MpComparison (l, op, r) -> comparison (eval state l) op (eval state r)
@@ -127,43 +124,22 @@ module Interpreter =
         | MpMultiply, AsFloats (l, r) -> MpFloat(l * r)
         | MpDivide, (MpInt l, MpInt r) -> MpInt(l - r)
         | MpDivide, AsFloats (l, r) -> MpFloat(l - r)
-        | _ -> raise (System.NotSupportedException())
+        | _ -> raise (NotSupportedException())
 
     and logical lhs op rhs =
         match op, lhs, rhs with
         | MpAnd, MpBool l, MpBool r -> MpBool(l && r)
         | MpOr, MpBool l, MpBool r -> MpBool(l || r)
         | MpXor, MpBool l, MpBool r -> MpBool((not l && r) || (not r && l))
-        | _, _, _ -> raise (System.NotSupportedException())
+        | _, _, _ -> raise (NotSupportedException())
 
-    // and invoke state invoke =
-    //     match invoke with
-    //     | Method (tn, name, args) ->
-    //         let t = getLibraryType tn
-    //         let mi = t.GetMethod(name)
-    //         let args = args |> Array.map (eval state >> toObj)
-    //         mi.Invoke(null, args) |> fromObj
-    //     | PropertyGet (tn, name) ->
-    //         let t = getLibraryType tn
-    //         let pi = t.GetProperty(name)
-    //         pi.GetValue(null) |> fromObj
-
-    /// Runs program
     let mpRun (program: instruction[]) =
-        /// Program index
         let mutable pi = 0
-        /// Variable lookup
         let variables = VarLookup()
-        /// For from EndFor lookup
         let forLoops = Dictionary<index, index * identifier * index * value>()
-        /// While from EndWhile lookup
         let whileLoops = Dictionary<index, index>()
-        /// Call stack for Gosubs
-        let callStack = Stack<index>()
-        /// Evaluates expression with variables
         let evalAux = eval variables
 
-        /// Assigns variable with result of expression
         let assign (value: assign) =
             match value with
             | Set (identifier, expr) -> variables[identifier] <- evalAux expr
@@ -190,30 +166,8 @@ module Interpreter =
             | MpBool x -> printfn $"%b{x}"
             | MpString x -> printfn $"%s{x}"
             | MpNull -> printfn "null"
+            | MpArrayValue x -> printfn $"%A{x}"
 
-        /// Sets property with result of expression
-        // let propertySet (tn, pn, expr) =
-        //     let t = getLibraryType tn
-        //     let pi = t.GetProperty(pn)
-        //     pi.SetValue(null, eval expr |> toObj)
-        //
-        // /// Obtains an array for the specified identifier
-        // let obtainArray identifier =
-        //     match variables.TryGetValue(identifier) with
-        //     | true, Array (array) -> array
-        //     | true, _ -> raise (System.NotSupportedException())
-        //     | false, _ ->
-        //         let array = Hashtable<value, value>()
-        //         variables.Add(identifier, Array(array))
-        //         array
-
-        // /// Sets array value at index with result of expression
-        // let setAt (identifier, index, expr) =
-        //     let array = obtainArray identifier
-        //     array.[eval index] <- eval expr
-
-        /// Finds first index of instructions
-        ///
         let initBlock instruction =
             match instruction with
             | MpWhile _ -> true
@@ -254,45 +208,12 @@ module Interpreter =
                 findStartBlock (ind - 1) newCant
 
 
-        // let isIf =
-        //     function
-        //     | If (_) -> true
-        //     | _ -> false
-        //
-        // let isElseIf =
-        //     function
-        //     | ElseIf (_) -> true
-        //     | _ -> false
-        //
-        // let isElse = (=) Else
-        // let isEndIf = (=) EndIf
-        //
-        // let isFor =
-        //     function
-        //     | For (_, _, _) -> true
-        //     | _ -> false
-        //
-        // let isEndFor = (=) EndFor
-        //
-        // let isWhile =
-        //     function
-        //     | While (_) -> true
-        //     | _ -> false
-        //
-        // let isEndWhile = (=) EndWhile
-        // let isFalse _ = false
-
-        /// Instruction step
         let step () =
             let instruction = program[pi]
 
             match instruction with
             | MpAssign set -> assign set
             | MpPrint exp -> print (evalAux exp)
-            // | PropertySet (tn, pn, expr) -> propertySet (tn, pn, expr)
-            // | SetAt (Location (identifier, [ index ]), expr) -> setAt (identifier, index, expr)
-            // | SetAt (_) -> raise (System.NotImplementedException())
-            // | Action (call) -> invoke variables call |> ignore
             | MpIf cond ->
                 let condition = toBool (evalAux cond)
 
@@ -316,7 +237,7 @@ module Interpreter =
                     if condition then
                         let indexEnd = findEndBlock (pi + 1) 1
                         pi <- indexEnd
-                | _ -> raise (System.NotSupportedException())
+                | _ -> raise (NotSupportedException())
 
             | MpElIf condEl ->
                 let indexStart = findStartBlock (pi - 1) 0
@@ -336,7 +257,7 @@ module Interpreter =
                     if (conditionIf || not conditionEl) then
                         let indexEnd = findEndBlock (pi + 1) 1
                         pi <- indexEnd
-                | _ -> raise (System.NotSupportedException())
+                | _ -> raise (NotSupportedException())
 
 
 

@@ -37,8 +37,6 @@ type expr =
     | MpArray of expr[]
     | MpLiteral of value
     | MpVar of identifier
-    | MpGetAt of location
-    | MpFunc of invoke
     | MpNeg of expr
     | MpArithmetic of expr * arithmetic * expr
     | MpComparison of expr * comparison * expr
@@ -57,22 +55,12 @@ type assign =
 type instruction =
     | MpPrint of expr
     | MpAssign of assign
-    | MpSetAt of location * expr
-    | MpPropertySet of string * string * expr
-    | MpAction of invoke
     | MpFor of identifier * int * int * int
-    | MpEndFor
     | MpIf of expr
     | MpElIf of expr
     | MpElse
-    | MpEndIf
     | MpWhile of expr
     | MpEnd
-    | MpSub of identifier
-    | MpEndSub
-    | MpGoSub of identifier
-    | MpLabel of label
-    | MpGoto of label
 
 open System
 open FParsec
@@ -153,7 +141,16 @@ module Parser =
         let isIdentifierChar c = isLetter c || isDigit c || c = '_'
 
         let reservedWords =
-            [ "for"; "while"; "if"; "else"; "elif"; "func"; "print"; "true"; "false";"array" ]
+            [ "for"
+              "while"
+              "if"
+              "else"
+              "elif"
+              "func"
+              "print"
+              "true"
+              "false"
+              "array" ]
 
         let reservedWord = choice (reservedWords |> List.map pstring)
 
