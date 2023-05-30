@@ -142,7 +142,14 @@ module Parser =
     let mpIdentifier: Parser<string, unit> =
         let isIdentifierFirstChar c = isLetter c || c = '_'
         let isIdentifierChar c = isLetter c || isDigit c || c = '_'
-        many1Satisfy2L isIdentifierFirstChar isIdentifierChar "identifier"
+
+        let reservedWords = [ "for"; "while"; "if"; "else"; "elif"; "func"; "print" ]
+        let reservedWord = choice (reservedWords |> List.map pstring)
+
+        notFollowedBy reservedWord
+        .>>. many1Satisfy2L isIdentifierFirstChar isIdentifierChar "identifier"
+        |>> snd
+
 
     let mpIdentifier_ws = mpIdentifier .>> ws
     let mpVar = mpIdentifier |>> MpVar
@@ -184,27 +191,31 @@ module Parser =
     oppL.AddOperator(InfixOperator("^^", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpXor, y))))
 
     let mpPrint =
-        pipe2 (pstring "print") (mpArithmetic <|> mpComparison <|> mpLogical) (fun _ -> MpPrint)
+        pipe3 (pstring "print(" .>>. ws) (mpArithmetic <|> mpComparison <|> mpLogical) (str_ws ")") (fun _ e _ ->
+            MpPrint e)
 
     let mpAssign =
-        pipe3 mpIdentifier_ws (str_ws "=") (mpArithmetic <|> mpComparison <|> mpLogical) (fun id _ e -> MpAssign(Set(id, e)))
+        pipe3 mpIdentifier_ws (str_ws "=") (mpArithmetic <|> mpComparison <|> mpLogical) (fun id _ e ->
+            MpAssign(Set(id, e)))
 
 
-    let mpInstruct = [ mpAssign ] |> List.map attempt |> choice
+    let mpInstruct = [ mpAssign; mpPrint ] |> List.map attempt |> choice
 
     type Line =
         | Blank
         | Instruction of instruction
 
     let mpComment = pchar '#' >>. skipManySatisfy (fun c -> c <> '\n') >>. pchar '\n'
-    let mpEol = mpComment <|> (pchar '\n')
+    let mpEol = mpComment <|> (pchar ';')
     let mpInstruction = ws >>. mpInstruct .>> mpEol |>> Instruction
     let mpBlank = ws >>. mpEol |>> (fun _ -> Blank)
     let mpLines = many (mpInstruction <|> mpBlank) .>> eof
 
-    let parse (program: string) =
+    let myParse (program: string) =
         match run mpLines program with
         | Success (result, _, _) ->
+            printfn "Ok"
+
             result
             |> List.choose (function
                 | Instruction i -> Some i
