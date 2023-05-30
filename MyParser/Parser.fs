@@ -63,7 +63,7 @@ type instruction =
     | MpElse
     | MpEndIf
     | MpWhile of expr
-    | MpEndWhile
+    | MpEnd
     | MpSub of identifier
     | MpEndSub
     | MpGoSub of identifier
@@ -79,7 +79,7 @@ module Parser =
 
     let mpNull: Parser<expr, unit> = pstring "null" >>% MpNull <?> "null" |>> MpLiteral
 
-    let mpBool: Parser<expr, obj> =
+    let mpBool: Parser<expr, unit> =
         let mpTrue = pstring "true" >>% MpBool true
         let mpFalse = pstring "false" >>% MpBool false
 
@@ -136,14 +136,21 @@ module Parser =
     let ws: Parser<unit, unit> =
         skipManySatisfy (fun c -> c = ' ' || c = '\t' || c = '\r')
 
+    let wsl: Parser<unit, unit> =
+        skipManySatisfy (fun c -> c = '\n' || c = ' ' || c = '\t' || c = '\r')
+
     let str_ws s = pstring s .>> ws
     let str_ws1 s = pstring s .>> spaces1
+    let str_wsl s = pstring s .>> wsl
+    let str_wsl1 s = pstring s .>> spaces1
 
     let mpIdentifier: Parser<string, unit> =
         let isIdentifierFirstChar c = isLetter c || c = '_'
         let isIdentifierChar c = isLetter c || isDigit c || c = '_'
 
-        let reservedWords = [ "for"; "while"; "if"; "else"; "elif"; "func"; "print" ]
+        let reservedWords =
+            [ "for"; "while"; "if"; "else"; "elif"; "func"; "print"; "true"; "false" ]
+
         let reservedWord = choice (reservedWords |> List.map pstring)
 
         notFollowedBy reservedWord
@@ -184,30 +191,43 @@ module Parser =
 
     let oppL = OperatorPrecedenceParser<expr, unit, unit>()
     let mpLogical = oppL.ExpressionParser
-    let termL = (mpComparison .>> ws) <|> between (str_ws "(") (str_ws ")") mpLogical
+
+    let termL =
+        ((mpComparison <|> mpBool) .>> ws)
+        <|> between (str_ws "(") (str_ws ")") mpLogical
+
     oppL.TermParser <- termL
     oppL.AddOperator(InfixOperator("&&", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpAnd, y))))
     oppL.AddOperator(InfixOperator("||", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpOr, y))))
     oppL.AddOperator(InfixOperator("^^", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpXor, y))))
 
     let mpPrint =
-        pipe3 (pstring "print(" .>>. ws) (mpArithmetic <|> mpComparison <|> mpLogical) (str_ws ")") (fun _ e _ ->
+        pipe3 (str_ws "print(") (mpComparison <|>mpLogical<|> mpArithmetic) (pstring ")") (fun _ e _ ->
             MpPrint e)
 
     let mpAssign =
-        pipe3 mpIdentifier_ws (str_ws "=") (mpArithmetic <|> mpComparison <|> mpLogical) (fun id _ e ->
+        pipe3 mpIdentifier_ws (str_ws "=") (mpComparison <|>mpLogical<|> mpArithmetic) (fun id _ e ->
             MpAssign(Set(id, e)))
+
+    let mpWhile =
+        pipe5 (str_ws "while") (str_ws "(") mpLogical (str_wsl ")") (pstring "{") (fun _ _ e _ _ -> MpWhile e)
+        
+    let mpEnd: Parser<instruction, unit> = pstring "}" |>> (fun _ -> MpEnd)
 
 
     let mpInstruct = [ mpAssign; mpPrint ] |> List.map attempt |> choice
-
+    let mpBlockInstruct=[ mpWhile;mpEnd] |> List.map attempt |> choice
+   
     type Line =
         | Blank
         | Instruction of instruction
 
     let mpComment = pchar '#' >>. skipManySatisfy (fun c -> c <> '\n') >>. pchar '\n'
-    let mpEol = mpComment <|> (pchar ';')
-    let mpInstruction = ws >>. mpInstruct .>> mpEol |>> Instruction
+
+    let mpEndInst: Parser<char, unit> = wsl >>. pchar ';'
+    
+    let mpEol = mpComment <|> (pchar '\n')
+    let mpInstruction = ws >>. ((mpInstruct .>> mpEndInst) <|> mpBlockInstruct) |>> Instruction
     let mpBlank = ws >>. mpEol |>> (fun _ -> Blank)
     let mpLines = many (mpInstruction <|> mpBlank) .>> eof
 

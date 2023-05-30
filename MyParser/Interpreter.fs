@@ -60,7 +60,7 @@ module Interpreter =
         | MpInt l, MpInt r -> l.CompareTo(r)
         | AsFloats (l, r) -> l.CompareTo(r)
         | MpString l, MpString r -> l.CompareTo(r)
-        | _ -> raise (System.NotSupportedException(sprintf "%A %A" lhs rhs))
+        | _ -> raise (System.NotSupportedException $"%A{lhs} %A{rhs}")
 
     open System.Collections.Generic
 
@@ -145,11 +145,11 @@ module Interpreter =
 
         let print (value: value) =
             match value with
-            | MpInt x -> printf $"%d{x}"
-            | MpFloat x -> printf $"%f{x}"
-            | MpBool x -> printf $"%b{x}"
-            | MpString x -> printf $"%s{x}"
-            | MpNull -> printf "null"
+            | MpInt x -> printfn $"%d{x}"
+            | MpFloat x -> printfn $"%f{x}"
+            | MpBool x -> printfn $"%b{x}"
+            | MpString x -> printfn $"%s{x}"
+            | MpNull -> printfn "null"
 
         /// Sets property with result of expression
         // let propertySet (tn, pn, expr) =
@@ -173,6 +173,18 @@ module Interpreter =
         //     array.[eval index] <- eval expr
 
         /// Finds first index of instructions
+        ///
+        let initBlock instruction =
+            match instruction with
+            | MpWhile _ -> true
+            | _ -> false
+
+        let endBlock instruction =
+            match instruction with
+            | MpEnd -> true
+            | _ -> false
+
+
         let findFirstIndex start (inc, dec) isMatch =
             let mutable i = start
             let mutable nest = 0
@@ -189,8 +201,15 @@ module Interpreter =
             i
 
         /// Finds index of instruction
-        let findIndex start (inc, dec) instruction =
-            findFirstIndex start (inc, dec) ((=) instruction)
+        let rec findIndex ind cant =
+            if initBlock program[ind] then
+                incr cant
+
+            if endBlock program[ind] then
+                decr cant
+
+            if cant = ref 0 then ind else findIndex (ind + 1) cant
+
 
         // let isIf =
         //     function
@@ -227,41 +246,43 @@ module Interpreter =
             match instruction with
             | MpAssign (set) -> assign set
             | MpPrint exp -> print (evalAux exp)
-        // | PropertySet (tn, pn, expr) -> propertySet (tn, pn, expr)
-        // | SetAt (Location (identifier, [ index ]), expr) -> setAt (identifier, index, expr)
-        // | SetAt (_) -> raise (System.NotImplementedException())
-        // | Action (call) -> invoke variables call |> ignore
-        // | If (condition)
-        // | ElseIf (condition) ->
-        //     if eval condition |> toBool |> not then
-        //         let isMatch x = isElseIf x || isElse x || isEndIf x
-        //         let index = findFirstIndex (!pi + 1) (isIf, isEndIf) isMatch
-        //         pi := if program.[index] |> isElseIf then index - 1 else index
-        // | Else ->
-        //     let index = findIndex !pi (isIf, isEndIf) EndIf
-        //     pi := index
-        // | EndIf -> ()
-        // | For ((Set (identifier, expr) as from), target, step) ->
-        //     assign from
-        //     let index = findIndex (!pi + 1) (isFor, isEndFor) EndFor
-        //     forLoops.[index] <- (!pi, identifier, target, step)
-        //
-        //     if toInt (variables.[identifier]) > toInt (eval target) then
-        //         pi := index
-        // | EndFor ->
-        //     let start, identifier, target, step = forLoops.[!pi]
-        //     let x = variables.[identifier]
-        //     variables.[identifier] <- arithmetic x Add (eval step)
-        //
-        //     if toInt (variables.[identifier]) <= toInt (eval target) then
-        //         pi := start
-        // | While condition ->
-        //     let index = findIndex (!pi + 1) (isWhile, isEndWhile) EndWhile
-        //     whileLoops.[index] <- !pi
-        //
-        //     if eval condition |> toBool |> not then
-        //         pi := index
-        // | EndWhile -> pi := whileLoops.[!pi] - 1
+            // | PropertySet (tn, pn, expr) -> propertySet (tn, pn, expr)
+            // | SetAt (Location (identifier, [ index ]), expr) -> setAt (identifier, index, expr)
+            // | SetAt (_) -> raise (System.NotImplementedException())
+            // | Action (call) -> invoke variables call |> ignore
+            // | If (condition)
+            // | ElseIf (condition) ->
+            //     if eval condition |> toBool |> not then
+            //         let isMatch x = isElseIf x || isElse x || isEndIf x
+            //         let index = findFirstIndex (!pi + 1) (isIf, isEndIf) isMatch
+            //         pi := if program.[index] |> isElseIf then index - 1 else index
+            // | Else ->
+            //     let index = findIndex !pi (isIf, isEndIf) EndIf
+            //     pi := index
+            // | EndIf -> ()
+            // | For ((Set (identifier, expr) as from), target, step) ->
+            //     assign from
+            //     let index = findIndex (!pi + 1) (isFor, isEndFor) EndFor
+            //     forLoops.[index] <- (!pi, identifier, target, step)
+            //
+            //     if toInt (variables.[identifier]) > toInt (eval target) then
+            //         pi := index
+            // | EndFor ->
+            //     let start, identifier, target, step = forLoops.[!pi]
+            //     let x = variables.[identifier]
+            //     variables.[identifier] <- arithmetic x Add (eval step)
+            //
+            //     if toInt (variables.[identifier]) <= toInt (eval target) then
+            //         pi := start
+            | MpWhile condition ->
+                let index = findIndex (!pi + 1) (ref 1)
+                whileLoops.[index] <- !pi
+
+                if evalAux condition |> toBool |> not then
+                    pi := index
+            | MpEnd ->
+                if whileLoops.ContainsKey(!pi) then
+                    pi := whileLoops[!pi] - 1
         // | Sub (identifier) -> pi := findIndex (!pi + 1) (isFalse, isFalse) EndSub
         // | GoSub (identifier) ->
         //     let index = findIndex 0 (isFalse, isFalse) (Sub(identifier))
