@@ -22,6 +22,7 @@ type comparison =
 type logical =
     | MpAnd
     | MpOr
+    | MpXor
 
 type value =
     | MpNull
@@ -75,13 +76,13 @@ module Parser =
 
     let (>>%) p x = p |>> (fun _ -> x)
 
-    let mpNull: Parser<value, unit> = pstring "null" >>% MpNull <?> "null"
+    let mpNull: Parser<expr, unit> = pstring "null" >>% MpNull <?> "null" |>> MpLiteral
 
-    let mpBool: Parser<value, obj> =
+    let mpBool: Parser<expr, obj> =
         let mpTrue = pstring "true" >>% MpBool true
         let mpFalse = pstring "false" >>% MpBool false
 
-        mpTrue <|> mpFalse <?> "bool"
+        mpTrue <|> mpFalse <?> "bool" |>> MpLiteral
 
     let mpUnEscapedChar: Parser<char, unit> =
         satisfy (fun ch -> ch <> '\\' && ch <> '\"')
@@ -118,9 +119,10 @@ module Parser =
 
         quote >>. manyChars jChar .>> quote
 
-    let mpString = quotedString <?> "quoted string" |>> MpString
+    let mpString: Parser<expr, unit> =
+        quotedString <?> "quoted string" |>> MpString |>> MpLiteral
 
-    let mpNumLiteral: Parser<expr, unit> =
+    let mpNum: Parser<expr, unit> =
         let numberFormat = NumberLiteralOptions.AllowFraction
 
         numberLiteral numberFormat "number"
@@ -143,25 +145,39 @@ module Parser =
 
     let mpIdentifier_ws = mpIdentifier .>> ws
     let mpVar = mpIdentifier |>> MpVar
-// let pinvoke, pinvokeimpl = createParserForwardedToRef ()
-// let pfunc = pinvoke |>> (fun x -> Func<_>(x))
-//
-// let plocation, plocationimpl = createParserForwardedToRef ()
-// let pgetat = plocation |>> (fun loc -> GetAt(loc))
-//
-// let pvalue =
-//     choice [
-//         mpNumLiteral; mpString
-//         attempt mpVar
-//     ]
-// type Assoc = Associativity
-//
-// let oppa = new OperatorPrecedenceParser<expr,unit,unit>()
-// let parithmetic = oppa.ExpressionParser
-// let terma = (pvalue .>> ws) <|> between (str_ws "(") (str_ws ")") parithmetic
-// oppa.TermParser <- terma
-// oppa.AddOperator(InfixOperator("+", ws, 1, Assoc.Left, fun x y -> Arithmetic(x, Add, y)))
-// oppa.AddOperator(InfixOperator("-", ws, 1, Assoc.Left, fun x y -> Arithmetic(x, Subtract, y)))
-// oppa.AddOperator(InfixOperator("*", ws, 2, Assoc.Left, fun x y -> Arithmetic(x, Multiply, y)))
-// oppa.AddOperator(InfixOperator("/", ws, 2, Assoc.Left, fun x y -> Arithmetic(x, Divide, y)))
-// oppa.AddOperator(PrefixOperator("-", ws, 2, true, fun x -> Neg(x)))
+
+    let mpValue = mpNum <|> mpString <|> mpNull <|> mpVar
+
+
+    type Assoc = Associativity
+
+    let oppA = OperatorPrecedenceParser<expr, unit, unit>()
+    let mpArithmetic = oppA.ExpressionParser
+
+    let termA = (mpValue .>> ws) <|> between (str_ws "(") (str_ws ")") mpArithmetic
+
+    oppA.TermParser <- termA
+    oppA.AddOperator(InfixOperator("+", ws, 1, Assoc.Left, (fun x y -> MpArithmetic(x, MpAdd, y))))
+    oppA.AddOperator(InfixOperator("-", ws, 1, Assoc.Left, (fun x y -> MpArithmetic(x, MpSubtract, y))))
+    oppA.AddOperator(InfixOperator("*", ws, 2, Assoc.Left, (fun x y -> MpArithmetic(x, MpMultiply, y))))
+    oppA.AddOperator(InfixOperator("/", ws, 2, Assoc.Left, (fun x y -> MpArithmetic(x, MpDivide, y))))
+    oppA.AddOperator(PrefixOperator("-", ws, 2, true, MpNeg))
+
+    let oppC = OperatorPrecedenceParser<expr, unit, unit>()
+    let mpComparison = oppC.ExpressionParser
+    let termC = (mpArithmetic .>> ws) <|> between (str_ws "(") (str_ws ")") mpComparison
+    oppC.TermParser <- termC
+    oppC.AddOperator(InfixOperator("==", ws, 1, Assoc.Left, (fun x y -> MpComparison(x, MpEq, y))))
+    oppC.AddOperator(InfixOperator("!=", ws, 1, Assoc.Left, (fun x y -> MpComparison(x, MpNe, y))))
+    oppC.AddOperator(InfixOperator("<=", ws, 2, Assoc.Left, (fun x y -> MpComparison(x, MpLe, y))))
+    oppC.AddOperator(InfixOperator(">=", ws, 2, Assoc.Left, (fun x y -> MpComparison(x, MpGe, y))))
+    oppC.AddOperator(InfixOperator("<", ws, 2, Assoc.Left, (fun x y -> MpComparison(x, MpLt, y))))
+    oppC.AddOperator(InfixOperator(">", ws, 2, Assoc.Left, (fun x y -> MpComparison(x, MpGt, y))))
+
+    let oppL = OperatorPrecedenceParser<expr, unit, unit>()
+    let mpLogical = oppL.ExpressionParser
+    let termL = (mpComparison .>> ws) <|> between (str_ws "(") (str_ws ")") mpLogical
+    oppL.TermParser <- termL
+    oppL.AddOperator(InfixOperator("&&", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpAnd, y))))
+    oppL.AddOperator(InfixOperator("||", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpOr, y))))
+    oppL.AddOperator(InfixOperator("^^", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpXor, y))))
