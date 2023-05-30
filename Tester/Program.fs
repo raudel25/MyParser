@@ -1,4 +1,5 @@
 ﻿open MyParser.Parser
+open MyParser.Interpreter
 open FParsec
 
 let runParser (parser: Parser<_, unit>) (input: string) =
@@ -15,4 +16,4 @@ match result with
 | Some x -> printfn "Parsed %A" x
 | None -> printfn "Failed to parse"
 
-myParse "print((a+a)+a ); a=0; 3for=12;"
+mpRun (mpParse "a=2;print(2 +a+3); a=0; q=12;")

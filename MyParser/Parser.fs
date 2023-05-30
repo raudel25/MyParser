@@ -211,7 +211,7 @@ module Parser =
     let mpBlank = ws >>. mpEol |>> (fun _ -> Blank)
     let mpLines = many (mpInstruction <|> mpBlank) .>> eof
 
-    let myParse (program: string) =
+    let mpParse (program: string) =
         match run mpLines program with
         | Success (result, _, _) ->
             printfn "Ok"
