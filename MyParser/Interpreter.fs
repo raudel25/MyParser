@@ -133,7 +133,7 @@ module Interpreter =
         /// Variable lookup
         let variables = VarLookup()
         /// For from EndFor lookup
-        let forLoops = Dictionary<index, index * identifier * expr * expr>()
+        let forLoops = Dictionary<index, index * identifier * index * value>()
         /// While from EndWhile lookup
         let whileLoops = Dictionary<index, index>()
         /// Call stack for Gosubs
@@ -260,13 +260,14 @@ module Interpreter =
             //     let index = findIndex !pi (isIf, isEndIf) EndIf
             //     pi := index
             // | EndIf -> ()
-            // | For ((Set (identifier, expr) as from), target, step) ->
-            //     assign from
-            //     let index = findIndex (!pi + 1) (isFor, isEndFor) EndFor
-            //     forLoops.[index] <- (!pi, identifier, target, step)
-            //
-            //     if toInt (variables.[identifier]) > toInt (eval target) then
-            //         pi := index
+            | MpFor (identifier, init, stop, step) ->
+                assign (Set(identifier, MpLiteral(MpInt init)))
+
+                let index = findIndex (!pi + 1) (ref 1)
+                forLoops.[index] <- (!pi, identifier, stop, MpInt step)
+
+                if toInt (variables.[identifier]) >= stop then
+                    pi := index
             // | EndFor ->
             //     let start, identifier, target, step = forLoops.[!pi]
             //     let x = variables.[identifier]
@@ -283,6 +284,15 @@ module Interpreter =
             | MpEnd ->
                 if whileLoops.ContainsKey(!pi) then
                     pi := whileLoops[!pi] - 1
+
+                if forLoops.ContainsKey(!pi) then
+                    let start, identifier, stop, step = forLoops.[!pi]
+                    let x = variables.[identifier]
+                    variables.[identifier] <- arithmetic x MpAdd step
+
+                    if toInt variables.[identifier] < stop then
+                        pi := start
+
         // | Sub (identifier) -> pi := findIndex (!pi + 1) (isFalse, isFalse) EndSub
         // | GoSub (identifier) ->
         //     let index = findIndex 0 (isFalse, isFalse) (Sub(identifier))

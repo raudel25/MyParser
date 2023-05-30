@@ -56,7 +56,7 @@ type instruction =
     | MpSetAt of location * expr
     | MpPropertySet of string * string * expr
     | MpAction of invoke
-    | MpFor of assign * expr * expr
+    | MpFor of identifier * int * int * int
     | MpEndFor
     | MpIf of expr
     | MpElseIf of expr
@@ -202,22 +202,26 @@ module Parser =
     oppL.AddOperator(InfixOperator("^^", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpXor, y))))
 
     let mpPrint =
-        pipe3 (str_ws "print(") (mpComparison <|>mpLogical<|> mpArithmetic) (pstring ")") (fun _ e _ ->
-            MpPrint e)
+        pipe3 (str_ws "print(") (mpComparison <|> mpLogical <|> mpArithmetic) (pstring ")") (fun _ e _ -> MpPrint e)
 
     let mpAssign =
-        pipe3 mpIdentifier_ws (str_ws "=") (mpComparison <|>mpLogical<|> mpArithmetic) (fun id _ e ->
+        pipe3 mpIdentifier_ws (str_ws "=") (mpComparison <|> mpLogical <|> mpArithmetic) (fun id _ e ->
             MpAssign(Set(id, e)))
+
+    let mpRange =
+        pipe5 pint32 (str_ws ",") pint32 (str_ws ",") pint32 (fun x _ y _ z -> (x, y, z))
 
     let mpWhile =
         pipe5 (str_ws "while") (str_ws "(") mpLogical (str_wsl ")") (pstring "{") (fun _ _ e _ _ -> MpWhile e)
-        
+
+    let mpFor: Parser<instruction, unit> =
+        pipe5 (str_ws "for") mpIdentifier_ws (str_ws "in") mpRange (wsl >>. pstring "{") (fun _ s _ (x, y, z) _ ->
+            MpFor(s, x, y, z))
+
     let mpEnd: Parser<instruction, unit> = pstring "}" |>> (fun _ -> MpEnd)
-
-
     let mpInstruct = [ mpAssign; mpPrint ] |> List.map attempt |> choice
-    let mpBlockInstruct=[ mpWhile;mpEnd] |> List.map attempt |> choice
-   
+    let mpBlockInstruct = [ mpWhile; mpFor; mpEnd ] |> List.map attempt |> choice
+
     type Line =
         | Blank
         | Instruction of instruction
@@ -225,9 +229,12 @@ module Parser =
     let mpComment = pchar '#' >>. skipManySatisfy (fun c -> c <> '\n') >>. pchar '\n'
 
     let mpEndInst: Parser<char, unit> = wsl >>. pchar ';'
-    
+
     let mpEol = mpComment <|> (pchar '\n')
-    let mpInstruction = ws >>. ((mpInstruct .>> mpEndInst) <|> mpBlockInstruct) |>> Instruction
+
+    let mpInstruction =
+        ws >>. ((mpInstruct .>> mpEndInst) <|> mpBlockInstruct) |>> Instruction
+
     let mpBlank = ws >>. mpEol |>> (fun _ -> Blank)
     let mpLines = many (mpInstruction <|> mpBlank) .>> eof
 

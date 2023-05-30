@@ -9,11 +9,11 @@ let runParser (parser: Parser<_, unit>) (input: string) =
         Some result
     | Failure (_, _, _) -> None
 
-let input = "while ( 2>2 ) \n{"
-let result = runParser mpWhile input
+let input = "for a in 2,3,4 {"
+let result = runParser mpFor input
 
 match result with
 | Some x -> printfn "Parsed %A" x
 | None -> printfn "Failed to parse"
 
-mpRun (mpParse "a=0; while(a<10){ print(a); a=a+1; while(false){}}")
+mpRun (mpParse "for a in 0,2,-1 { print(\"a\");}")
