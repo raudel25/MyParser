@@ -150,6 +150,7 @@ module Interpreter =
         | MpMultiply, AsDoubles (l, r) -> MpDouble(l * r)
         | MpDivide, (MpInt l, MpInt r) -> MpInt(l - r)
         | MpDivide, AsDoubles (l, r) -> MpDouble(l - r)
+        | MpRest, (MpInt l, MpInt r) -> MpInt(l % r)
         | _ -> raise (NotSupportedException("Arithmetic operation is not supported"))
 
     and logical lhs op rhs =
@@ -202,6 +203,7 @@ module Interpreter =
         let mutable valueReturn = MpNull
         let forLoops = Dictionary<index, index * identifier * index * value>()
         let whileLoops = Dictionary<index, index>()
+        let loops = Stack<index>()
         let evalAux = eval state
 
         let assign (value: assign) =
@@ -322,16 +324,20 @@ module Interpreter =
 
                     let index = findEndBlock (pi + 1) 1
                     forLoops[index] <- (pi, identifier, stop, MpInt step)
+                    loops.Push(index)
 
                     if toInt variables[identifier] >= stop then
+                        let _ = loops.Pop()
                         pi <- index
                 | _ -> raise (NotSupportedException("Cannot convert to int"))
 
             | MpWhile condition ->
                 let index = findEndBlock (pi + 1) 1
                 whileLoops[index] <- pi
+                loops.Push(index)
 
                 if evalAux condition |> toBool |> not then
+                    let _ = loops.Pop()
                     pi <- index
             | MpEnd ->
                 if whileLoops.ContainsKey(pi) then
@@ -360,6 +366,14 @@ module Interpreter =
             | MpReturn expr ->
                 valueReturn <- evalAux expr
                 pi <- pe
+
+            | MpBreak ->
+                if loops.Count = 0 then
+                    raise (NotSupportedException("Except break"))
+
+                let aux = loops.Peek()
+                let _ = loops.Pop()
+                pi <- aux
 
         while pi < pe do
             step ()

@@ -11,6 +11,7 @@ type arithmetic =
     | MpSubtract
     | MpMultiply
     | MpDivide
+    | MpRest
 
 type comparison =
     | MpEq
@@ -64,6 +65,7 @@ type instruction =
     | MpWhile of expr
     | MpEnd
     | MpReturn of expr
+    | MpBreak
 
 open System
 open FParsec
@@ -80,7 +82,8 @@ module Parser =
           "true"
           "false"
           "return"
-          "func" ]
+          "func"
+          "break" ]
 
     let reservedFunctions0 = [ "input" ]
     let reservedFunctions1 = [ "printLn"; "printL"; "int"; "double"; "str" ]
@@ -217,6 +220,7 @@ module Parser =
     oppA.AddOperator(InfixOperator("*", ws, 2, Assoc.Left, (fun x y -> MpArithmetic(x, MpMultiply, y))))
     oppA.AddOperator(InfixOperator("/", ws, 2, Assoc.Left, (fun x y -> MpArithmetic(x, MpDivide, y))))
     oppA.AddOperator(PrefixOperator("-", ws, 2, true, MpNeg))
+    oppA.AddOperator(InfixOperator("%", ws, 2, Assoc.Left, (fun x y -> MpArithmetic(x, MpRest, y))))
 
     let oppC = OperatorPrecedenceParser<expr, unit, unit>()
     let mpComparison = oppC.ExpressionParser
@@ -282,10 +286,10 @@ module Parser =
     mpReservedFuncR.Value <- mpReservedFunc0 <|> mpReservedFunc1
 
     let mpAssign =
-        pipe3 mpIdentifier (str_ws "=") mpExpr (fun id _ e -> MpAssign(Set(id, e)))
+        pipe3 mpIdentifier (ws >>. (str_ws "=")) mpExpr (fun id _ e -> MpAssign(Set(id, e)))
 
     let mpAssignE =
-        pipe3 (mpIndex .>> ws) (str_ws "=") mpExpr (fun id _ e -> MpAssign(SetE(id, e)))
+        pipe3 (mpIndex .>> ws) (ws >>. (str_ws "=")) mpExpr (fun id _ e -> MpAssign(SetE(id, e)))
 
     let mpExprInstr = mpExpr |>> MpExpr
 
@@ -329,8 +333,12 @@ module Parser =
 
     let mpReturn = attempt mpReturnValue <|> mpReturnVoid
 
+    let mpBreak: Parser<instruction, unit> = pstring "break" |>> (fun _ -> MpBreak)
+
     let mpInstruct =
-        [ mpAssign; mpAssignE; mpExprInstr; mpReturn ] |> List.map attempt |> choice
+        [ mpAssign; mpAssignE; mpExprInstr; mpReturn; mpBreak ]
+        |> List.map attempt
+        |> choice
 
     let mpBlockInstruct =
         [ mpWhile; mpFor; mpEnd; mpIf; mpElIf; mpElse; mpFunc ]
