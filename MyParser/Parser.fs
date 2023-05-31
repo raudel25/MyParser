@@ -36,7 +36,8 @@ type value =
 
 type expr =
     | MpIndex of identifier * expr list
-    | MpArray of expr[]
+    | MpArrayL of expr[]
+    | MpArrayD of expr * expr
     | MpLiteral of value
     | MpVar of identifier
     | MpNeg of expr
@@ -55,7 +56,7 @@ type instruction =
     | MpFunc of identifier * identifier list
     | MpAssign of assign
     | MpExpr of expr
-    | MpFor of identifier * int * int * int
+    | MpFor of identifier * expr * expr * expr
     | MpIf of expr
     | MpElIf of expr
     | MpElse
@@ -77,7 +78,6 @@ module Parser =
           "func"
           "true"
           "false"
-          "array"
           "return"
           "func" ]
 
@@ -177,22 +177,27 @@ module Parser =
 
     let mpIdentifier_ws = mpIdentifier .>> ws
 
-    let mpVar: Parser<expr, unit> =
-        (notFollowedBy (mpIdentifier .>>. (pstring "[" <|> pstring "("))
-         .>>. mpIdentifier)
-        |>> (fun (_, y) -> (MpVar y))
+    let mpVar: Parser<expr, unit> = mpIdentifier |>> MpVar
 
-    let mpValue = mpNum <|> mpString <|> mpNull <|> mpVar <|> mpBool <|> mpChar
+    let mpArray, mpArrayR = createParserForwardedToRef ()
 
-    let mpArrayL =
-        (between (pchar '[') (pchar ']') (sepBy (ws >>. mpValue .>> ws) (pchar ',')))
-        |>> List.toArray
+    let mpIndex, mpIndexR = createParserForwardedToRef ()
 
-    let mpArrayV =
-        pipe5 (str_ws "array(") (mpValue .>> ws) (str_ws ",") (puint32 .>> ws) (pstring ")") (fun _ x _ y _ ->
-            Array.create (int y) x)
+    let mpInvoke, mpInvokeR = createParserForwardedToRef ()
 
-    let mpArray = mpArrayL <|> mpArrayV |>> MpArray
+    let mpReservedFunc, mpReservedFuncR = createParserForwardedToRef ()
+
+    let mpValue =
+        choice
+            [ attempt mpIndex
+              attempt mpInvoke
+              attempt mpReservedFunc
+              mpNum
+              mpString
+              mpNull
+              mpVar
+              mpBool
+              mpChar ]
 
     type Assoc = Associativity
 
@@ -200,14 +205,9 @@ module Parser =
 
     let rec mpArithmetic = oppA.ExpressionParser
 
-    and mpGetIndex =
-        (notFollowedBy (mpIdentifier .>>. pstring "("))
-        .>>. pipe2 mpIdentifier (many1 (str_ws "[" >>. mpArithmetic .>> str_ws "]")) (fun x y -> MpIndex(x, y))
-        |>> snd
+    mpIndexR.Value <- pipe2 mpIdentifier (many1 (str_ws "[" >>. mpArithmetic .>> str_ws "]")) (fun x y -> MpIndex(x, y))
 
-    let termA =
-        ((mpValue <|> mpGetIndex) .>> ws)
-        <|> between (str_ws "(") (str_ws ")") mpArithmetic
+    let termA = (mpValue .>> ws) <|> between (str_ws "(") (str_ws ")") mpArithmetic
 
     oppA.TermParser <- termA
     oppA.AddOperator(InfixOperator("+", ws, 1, Assoc.Left, (fun x y -> MpArithmetic(x, MpAdd, y))))
@@ -239,21 +239,29 @@ module Parser =
     oppL.AddOperator(InfixOperator("||", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpOr, y))))
     oppL.AddOperator(InfixOperator("^^", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpXor, y))))
 
-    let mpExpB = mpLogical <|> mpComparison <|> mpArithmetic <|> mpValue <|> mpArray
+    let mpExpr = mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray
+
+    let mpArrayL =
+        (between (pchar '[') (pchar ']') (sepBy (ws >>. mpExpr .>> ws) (pchar ',')))
+        |>> List.toArray
+        |>> MpArrayL
+
+    let mpArrayD =
+        pipe5 (str_ws "[") (mpExpr .>> ws) (str_ws ";") (mpExpr .>> ws) (pstring "]") (fun _ x _ y _ -> MpArrayD(x, y))
+
+    mpArrayR.Value <- attempt mpArrayL <|> attempt mpArrayD
+
 
     let mpInvokeVar =
-        between (str_ws "(") (pstring ")") (sepBy (ws >>. mpExpB .>> ws) (pchar ','))
+        between (str_ws "(") (pstring ")") (sepBy (ws >>. mpExpr .>> ws) (pchar ','))
 
-    let mpInvoke =
-        (notFollowedBy (mpIdentifier .>>. pstring "["))
-        .>>. pipe2 mpIdentifier mpInvokeVar (fun x y -> MpInvoke(x, y))
-        |>> snd
+    mpInvokeR.Value <- pipe2 mpIdentifier mpInvokeVar (fun x y -> MpInvoke(x, y))
 
     let mpReservedFuncIdentifier1: Parser<string, unit> =
         choice (reservedFunctions1 |> List.map pstring)
 
     let mpReservedFunc1 =
-        pipe2 mpReservedFuncIdentifier1 (between (str_ws "(") (pstring ")") (ws >>. mpExpB .>> ws)) (fun x y ->
+        pipe2 mpReservedFuncIdentifier1 (between (str_ws "(") (pstring ")") (ws >>. mpExpr .>> ws)) (fun x y ->
             MpReservedFunc1(x, y))
 
     let mpReservedFuncIdentifier0: Parser<string, unit> =
@@ -262,30 +270,26 @@ module Parser =
     let mpReservedFunc0 =
         pipe2 mpReservedFuncIdentifier0 (between (str_ws "(") (pstring ")") ws) (fun x _ -> MpReservedFunc0 x)
 
-    let mpReservedFunc = mpReservedFunc0 <|> mpReservedFunc1
-
-    let mpExpr = mpExpB <|> mpInvoke <|> mpReservedFunc
+    mpReservedFuncR.Value <- mpReservedFunc0 <|> mpReservedFunc1
 
     let mpAssign =
         pipe3 mpIdentifier (str_ws "=") mpExpr (fun id _ e -> MpAssign(Set(id, e)))
 
     let mpAssignE =
-        pipe3 (mpGetIndex .>> ws) (str_ws "=") mpExpr (fun id _ e -> MpAssign(SetE(id, e)))
+        pipe3 (mpIndex .>> ws) (str_ws "=") mpExpr (fun id _ e -> MpAssign(SetE(id, e)))
 
     let mpExprInstr = mpExpr |>> MpExpr
 
     let mpRange3 =
-        pipe5 pint32 (str_ws ",") pint32 (str_ws ",") pint32 (fun x _ y _ z -> (x, y, z))
+        pipe5 mpArithmetic (str_ws ",") mpArithmetic (str_ws ",") mpArithmetic (fun x _ y _ z -> (x, y, z))
 
     let mpRange2 =
-        notFollowedBy mpRange3
-        .>>. pipe3 pint32 (str_ws ",") pint32 (fun x _ y -> (x, y, 1))
-        |>> snd
+        pipe3 mpArithmetic (str_ws ",") mpArithmetic (fun x _ y -> (x, y, MpLiteral(MpInt 1)))
 
     let mpRange1 =
-        (notFollowedBy mpRange2 .>>. (pint32 |>> (fun x -> (0, x, 1)))) |>> snd
+        mpArithmetic |>> (fun x -> (MpLiteral(MpInt 0), x, MpLiteral(MpInt 1)))
 
-    let mpRange = mpRange1 <|> mpRange2 <|> mpRange3
+    let mpRange = attempt mpRange3 <|> attempt mpRange2 <|> attempt mpRange1
 
     let mpWhile =
         pipe5 (str_ws "while") (str_ws "(") mpLogical (str_wsl ")") (pstring "{") (fun _ _ e _ _ -> MpWhile e)
@@ -312,11 +316,9 @@ module Parser =
 
     let mpReturnValue = pipe2 (str_ws "return") mpExpr (fun _ -> MpReturn)
 
-    let mpReturnVoid =
-        (notFollowedBy mpReturnValue .>>. pstring "return")
-        |>> (fun _ -> MpReturn(MpLiteral MpNull))
+    let mpReturnVoid = pstring "return" |>> (fun _ -> MpReturn(MpLiteral MpNull))
 
-    let mpReturn = mpReturnVoid <|> mpReturnValue
+    let mpReturn = attempt mpReturnValue <|> mpReturnVoid
 
     let mpInstruct =
         [ mpAssign; mpAssignE; mpExprInstr; mpReturn ] |> List.map attempt |> choice

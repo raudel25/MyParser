@@ -68,7 +68,7 @@ module Interpreter =
                 raise (NotSupportedException("variable does not exist"))
 
             vars[identifier]
-        | MpArray a ->
+        | MpArrayL a ->
             let newA = Array.create a.Length MpNull
 
             for i in 0 .. (a.Length - 1) do
@@ -76,6 +76,13 @@ module Interpreter =
                 newA[i] <- result
 
             MpArrayValue newA
+        | MpArrayD (a, b) ->
+            let a = eval state a
+            let b = eval state b
+
+            match b with
+            | MpInt b -> MpArrayValue(Array.create b a)
+            | _ -> raise (NotSupportedException("Cannot convert to int"))
         | MpIndex (identifier, indices) ->
             let value = vars[identifier]
 
@@ -87,13 +94,13 @@ module Interpreter =
         | MpLogical (l, op, r) -> logical (eval state l) op (eval state r)
         | MpInvoke (s, expr) ->
             if not (functions.ContainsKey(s)) then
-                raise (NotSupportedException("function does not exist"))
+                raise (NotSupportedException("Function does not exist"))
 
             let variables = VarLookup()
             let identifiers, start, stop = functions[s]
 
             if identifiers.Length <> expr.Length then
-                raise (NotSupportedException("The function does not have all parameters"))
+                raise (NotSupportedException("Function does not have all parameters"))
 
             for i in 0 .. identifiers.Length - 1 do
                 variables[identifiers[i]] <- (eval state expr[i])
@@ -292,13 +299,19 @@ module Interpreter =
                 | _ -> raise (NotSupportedException())
 
             | MpFor (identifier, init, stop, step) ->
-                assign (Set(identifier, MpLiteral(MpInt init)))
+                let init, stop, step = (evalAux init, evalAux stop, evalAux step)
 
-                let index = findEndBlock (pi + 1) 1
-                forLoops[index] <- (pi, identifier, stop, MpInt step)
+                match (init, stop, step) with
+                | MpInt init, MpInt stop, MpInt step ->
+                    assign (Set(identifier, MpLiteral(MpInt init)))
 
-                if toInt variables[identifier] >= stop then
-                    pi <- index
+                    let index = findEndBlock (pi + 1) 1
+                    forLoops[index] <- (pi, identifier, stop, MpInt step)
+
+                    if toInt variables[identifier] >= stop then
+                        pi <- index
+                | _ -> raise (NotSupportedException("Cannot convert to int"))
+
             | MpWhile condition ->
                 let index = findEndBlock (pi + 1) 1
                 whileLoops[index] <- pi
