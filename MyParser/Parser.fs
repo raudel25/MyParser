@@ -81,7 +81,7 @@ module Parser =
           "func" ]
 
     let reservedFunctions0 = [ "input" ]
-    let reservedFunctions1 = [ "printLn"; "printL"; "int";"float";"str" ]
+    let reservedFunctions1 = [ "printLn"; "printL"; "int"; "float"; "str" ]
 
     let (>>%) p x = p |>> (fun _ -> x)
 
@@ -301,7 +301,13 @@ module Parser =
     let mpFunc =
         pipe4 (str_ws "func") mpIdentifier mpFuncVar (str_wsl "{") (fun _ x y _ -> MpFunc(x, y))
 
-    let mpReturn = pipe2 (str_ws "return") mpExpr (fun _ -> MpReturn)
+    let mpReturnValue = pipe2 (str_ws "return") mpExpr (fun _ -> MpReturn)
+
+    let mpReturnVoid =
+        (notFollowedBy mpReturnValue .>>. pstring "return")
+        |>> (fun _ -> MpReturn(MpLiteral MpNull))
+
+    let mpReturn = mpReturnVoid <|> mpReturnValue
 
     let mpInstruct =
         [ mpAssign; mpAssignE; mpExprInstr; mpReturn ] |> List.map attempt |> choice
