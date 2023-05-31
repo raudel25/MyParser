@@ -246,8 +246,7 @@ module Parser =
     let mpSliceInd =
         (pipe3 mpArithmetic (str_ws ":") mpArithmetic (fun x _ y -> (x, y)))
 
-    mpSliceR.Value <-
-        pipe4 mpIdentifier (str_ws "[") mpSliceInd (pstring "]") (fun s _ (x, y) _ -> MpSlice(s, x, y))
+    mpSliceR.Value <- pipe4 mpIdentifier (str_ws "[") mpSliceInd (pstring "]") (fun s _ (x, y) _ -> MpSlice(s, x, y))
 
     let mpExpr = mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray
 
@@ -322,7 +321,7 @@ module Parser =
         between (str_ws "(") (pstring ")") (sepBy (ws >>. mpIdentifier .>> ws) (pchar ','))
 
     let mpFunc =
-        pipe4 (str_ws "func") mpIdentifier mpFuncVar (str_wsl "{") (fun _ x y _ -> MpFunc(x, y))
+        pipe4 (str_ws "func") mpIdentifier mpFuncVar (wsl >>. pstring "{") (fun _ x y _ -> MpFunc(x, y))
 
     let mpReturnValue = pipe2 (str_ws "return") mpExpr (fun _ -> MpReturn)
 
@@ -352,7 +351,7 @@ module Parser =
         ws >>. ((mpInstruct .>> mpEndInst) <|> mpBlockInstruct) |>> Instruction
 
     let mpBlank = ws >>. mpEol |>> (fun _ -> Blank)
-    let mpLines = many (mpInstruction <|> mpBlank) .>> eof
+    let mpLines = many (attempt mpInstruction <|> mpBlank) .>> eof
 
     let mpParse (program: string) =
         match run mpLines program with
