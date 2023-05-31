@@ -237,8 +237,20 @@ module Parser =
         pipe3 (mpGetIndex .>> ws) (str_ws "=") (mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray) (fun id _ e ->
             MpAssign(SetE(id, e)))
 
-    let mpRange =
+    let mpExpr = mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray |>> MpExpr
+
+    let mpRange3 =
         pipe5 pint32 (str_ws ",") pint32 (str_ws ",") pint32 (fun x _ y _ z -> (x, y, z))
+
+    let mpRange2 =
+        notFollowedBy mpRange3
+        .>>. pipe3 pint32 (str_ws ",") pint32 (fun x _ y -> (x, y, 1))
+        |>> snd
+
+    let mpRange1 =
+        (notFollowedBy mpRange2 .>>. (pint32 |>> (fun x -> (0, x, 1)))) |>> snd
+
+    let mpRange = mpRange1 <|> mpRange2 <|> mpRange3
 
     let mpWhile =
         pipe5 (str_ws "while") (str_ws "(") mpLogical (str_wsl ")") (pstring "{") (fun _ _ e _ _ -> MpWhile e)
@@ -256,7 +268,9 @@ module Parser =
     let mpElse = pipe2 (str_wsl "else") (pstring "{") (fun _ _ -> MpElse)
 
     let mpEnd: Parser<instruction, unit> = pstring "}" |>> (fun _ -> MpEnd)
-    let mpInstruct = [ mpAssign; mpAssignE; mpPrint ] |> List.map attempt |> choice
+
+    let mpInstruct =
+        [ mpAssign; mpAssignE; mpPrint; mpExpr ] |> List.map attempt |> choice
 
     let mpBlockInstruct =
         [ mpWhile; mpFor; mpEnd; mpIf; mpElIf; mpElse ] |> List.map attempt |> choice

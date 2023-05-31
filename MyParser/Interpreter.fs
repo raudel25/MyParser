@@ -16,17 +16,6 @@ module Interpreter =
         | x -> raise (NotSupportedException(x.ToString()))
 
 
-    let toObj =
-        let f x =
-            match x with
-            | MpBool x -> box x
-            | MpInt x -> box x
-            | MpFloat x -> box x
-            | MpString x -> box x
-            | MpNull -> null
-            | MpArrayValue _ -> raise (NotSupportedException())
-
-        f
 
     let toInt =
         let f x =
@@ -35,7 +24,7 @@ module Interpreter =
             | MpFloat x -> int x
             | MpString x -> int x
             | MpNull -> 0
-            | _ -> raise (NotSupportedException())
+            | _ -> raise (NotSupportedException("Cannot convert to int"))
 
         f
 
@@ -43,16 +32,10 @@ module Interpreter =
         let f x =
             match x with
             | MpBool x -> x
-            | _ -> raise (NotSupportedException())
+            | _ -> raise (NotSupportedException("Cannot convert to bool"))
 
         f
 
-    let toArray =
-        function
-        | MpArray x -> x
-        | _ -> raise (NotSupportedException())
-
-    /// Coerces a tuple of numeric values to double
     let (|AsFloats|_|) =
         function
         | MpFloat l, MpFloat r -> Some(l, r)
@@ -70,8 +53,6 @@ module Interpreter =
 
     type VarLookup = Dictionary<identifier, value>
 
-
-    /// Evaluates expressions
     let rec eval state (expr: expr) =
         let (vars: VarLookup) = state
 
@@ -118,14 +99,14 @@ module Interpreter =
         | MpMultiply, AsFloats (l, r) -> MpFloat(l * r)
         | MpDivide, (MpInt l, MpInt r) -> MpInt(l - r)
         | MpDivide, AsFloats (l, r) -> MpFloat(l - r)
-        | _ -> raise (NotSupportedException())
+        | _ -> raise (NotSupportedException("Arithmetic operation is not supported"))
 
     and logical lhs op rhs =
         match op, lhs, rhs with
         | MpAnd, MpBool l, MpBool r -> MpBool(l && r)
         | MpOr, MpBool l, MpBool r -> MpBool(l || r)
         | MpXor, MpBool l, MpBool r -> MpBool((not l && r) || (not r && l))
-        | _, _, _ -> raise (NotSupportedException())
+        | _, _, _ -> raise (NotSupportedException("Logical operation is not supported"))
 
     and getIndices state (value: value) (indices: expr list) ind =
         let index = toInt (eval state indices[ind])
@@ -277,8 +258,6 @@ module Interpreter =
                         pi <- indexEnd
                 | _ -> raise (NotSupportedException())
 
-
-
             | MpFor (identifier, init, stop, step) ->
                 assign (Set(identifier, MpLiteral(MpInt init)))
 
@@ -305,14 +284,9 @@ module Interpreter =
                     if toInt variables[identifier] < stop then
                         pi <- start
 
-        // | Sub (identifier) -> pi := findIndex (!pi + 1) (isFalse, isFalse) EndSub
-        // | GoSub (identifier) ->
-        //     let index = findIndex 0 (isFalse, isFalse) (Sub(identifier))
-        //     callStack.Push(!pi)
-        //     pi := index
-        // | EndSub -> pi := callStack.Pop()
-        // | Label (label) -> ()
-        // | Goto (label) -> pi := findIndex 0 (isFalse, isFalse) (Label(label))
+            | MpExpr x ->
+                let _ = evalAux x
+                ()
 
         while pi < program.Length do
             step ()
