@@ -13,6 +13,7 @@ module Interpreter =
         | :? int as x -> MpInt x
         | :? double as x -> MpDouble x
         | :? string as x -> MpString x
+        | :? char as x -> MpChar x
         | null -> MpNull
         | x -> raise (NotSupportedException(x.ToString()))
 
@@ -50,6 +51,7 @@ module Interpreter =
         | MpInt l, MpInt r -> l.CompareTo(r)
         | AsDoubles (l, r) -> l.CompareTo(r)
         | MpString l, MpString r -> l.CompareTo(r)
+        | MpChar l, MpChar r -> l.CompareTo(r)
         | _ -> raise (NotSupportedException $"%A{lhs} %A{rhs}")
 
     type VarLookup = Dictionary<identifier, value>
@@ -116,6 +118,8 @@ module Interpreter =
         match op, (lhs, rhs) with
         | MpAdd, (MpInt l, MpInt r) -> MpInt(l + r)
         | MpAdd, (MpChar l, MpChar r) -> MpChar(l + r)
+        | MpAdd, (MpString l, x) -> MpString(l + toStr x)
+        | MpAdd, (x, MpString r) -> MpString(toStr x + r)
         | MpAdd, AsDoubles (l, r) -> MpDouble(l + r)
         | MpSubtract, (MpInt l, MpInt r) -> MpInt(l - r)
         | MpSubtract, (MpChar l, MpChar r) -> MpChar(l - r)

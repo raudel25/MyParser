@@ -184,8 +184,6 @@ module Parser =
 
     let mpValue = mpNum <|> mpString <|> mpNull <|> mpVar <|> mpBool <|> mpChar
 
-    let mpValueA = mpNum <|> mpChar <|> mpVar
-
     let mpArrayL =
         (between (pchar '[') (pchar ']') (sepBy (ws >>. mpValue .>> ws) (pchar ',')))
         |>> List.toArray
@@ -208,7 +206,7 @@ module Parser =
         |>> snd
 
     let termA =
-        ((mpValueA <|> mpGetIndex) .>> ws)
+        ((mpValue <|> mpGetIndex) .>> ws)
         <|> between (str_ws "(") (str_ws ")") mpArithmetic
 
     oppA.TermParser <- termA
@@ -220,7 +218,9 @@ module Parser =
 
     let oppC = OperatorPrecedenceParser<expr, unit, unit>()
     let mpComparison = oppC.ExpressionParser
+
     let termC = (mpArithmetic .>> ws) <|> between (str_ws "(") (str_ws ")") mpComparison
+
     oppC.TermParser <- termC
     oppC.AddOperator(InfixOperator("==", ws, 1, Assoc.Left, (fun x y -> MpComparison(x, MpEq, y))))
     oppC.AddOperator(InfixOperator("!=", ws, 1, Assoc.Left, (fun x y -> MpComparison(x, MpNe, y))))
@@ -232,9 +232,7 @@ module Parser =
     let oppL = OperatorPrecedenceParser<expr, unit, unit>()
     let mpLogical = oppL.ExpressionParser
 
-    let termL =
-        ((mpComparison <|> mpBool) .>> ws)
-        <|> between (str_ws "(") (str_ws ")") mpLogical
+    let termL = (mpComparison .>> ws) <|> between (str_ws "(") (str_ws ")") mpLogical
 
     oppL.TermParser <- termL
     oppL.AddOperator(InfixOperator("&&", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpAnd, y))))
@@ -347,8 +345,6 @@ module Parser =
     let mpParse (program: string) =
         match run mpLines program with
         | Success (result, _, _) ->
-            printfn "Ok"
-
             result
             |> List.choose (function
                 | Instruction i -> Some i
