@@ -16,4 +16,4 @@ match result with
 | Some x -> printfn "Parsed %A" x
 | None -> printfn "Failed to parse"
 
-let a=mpRun (mpParse "func a(n){ if(n==1){ return 1; } b=a(n-1); return n+b; } b=a(3); print(b);")
+let a=mpRun (mpParse " s=input(); printLn(s);")

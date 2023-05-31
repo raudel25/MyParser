@@ -3,6 +3,7 @@ namespace MyParser
 open System
 open System.Collections.Generic
 open Microsoft.FSharp.Core
+open MyParser.LibraryFunc
 
 module Interpreter =
 
@@ -96,6 +97,8 @@ module Interpreter =
                 variables[identifiers[i]] <- (eval state expr[i])
 
             mpRunAux (ProgramState(variables, functions, program)) start stop
+        | MpReservedFunc0 s -> funcLib0 s 
+        | MpReservedFunc1 (s, expr) -> funcLib1 s (eval state expr)
 
     and comparison lhs op rhs =
         let x = compare lhs rhs
@@ -178,15 +181,6 @@ module Interpreter =
 
                 | _ -> raise (NotSupportedException())
 
-        let print (value: value) =
-            match value with
-            | MpInt x -> printfn $"%d{x}"
-            | MpFloat x -> printfn $"%f{x}"
-            | MpBool x -> printfn $"%b{x}"
-            | MpString x -> printfn $"%s{x}"
-            | MpNull -> printfn "null"
-            | MpArrayValue x -> printfn $"%A{x}"
-
         let initBlock instruction =
             match instruction with
             | MpWhile _ -> true
@@ -239,7 +233,6 @@ module Interpreter =
 
             match instruction with
             | MpAssign set -> assign set
-            | MpPrint exp -> print (evalAux exp)
             | MpIf cond ->
                 let condition = toBool (evalAux cond)
 

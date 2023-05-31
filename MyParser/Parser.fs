@@ -2,7 +2,6 @@
 
 open Microsoft.FSharp.Collections
 
-type label = string
 type identifier = string
 type index = int
 type Hashtable<'k, 'v> = System.Collections.Generic.Dictionary<'k, 'v>
@@ -44,13 +43,14 @@ type expr =
     | MpComparison of expr * comparison * expr
     | MpLogical of expr * logical * expr
     | MpInvoke of identifier * expr list
+    | MpReservedFunc0 of identifier
+    | MpReservedFunc1 of identifier * expr
 
 type assign =
     | Set of identifier * expr
     | SetE of expr * expr
 
 type instruction =
-    | MpPrint of expr
     | MpFunc of identifier * identifier list
     | MpAssign of assign
     | MpExpr of expr
@@ -74,12 +74,14 @@ module Parser =
           "else"
           "elif"
           "func"
-          "print"
           "true"
           "false"
           "array"
           "return"
           "func" ]
+
+    let reservedFunctions0 = [ "input" ]
+    let reservedFunctions1 = [ "printLn"; "printL" ]
 
     let (>>%) p x = p |>> (fun _ -> x)
 
@@ -153,7 +155,9 @@ module Parser =
     let mpIdentifier: Parser<string, unit> =
         let isIdentifierFirstChar c = isLetter c || c = '_'
         let isIdentifierChar c = isLetter c || isDigit c || c = '_'
-        let reservedWord = choice (reservedWords |> List.map pstring)
+
+        let reservedWord =
+            choice (reservedWords @ reservedFunctions0 @ reservedFunctions1 |> List.map pstring)
 
         notFollowedBy reservedWord
         .>>. many1Satisfy2L isIdentifierFirstChar isIdentifierChar "identifier"
@@ -228,8 +232,6 @@ module Parser =
 
     let mpExpB = mpLogical <|> mpComparison <|> mpArithmetic <|> mpValue <|> mpArray
 
-    let mpPrint = pipe3 (str_ws "print(") mpExpB (pstring ")") (fun _ e _ -> MpPrint e)
-
     let mpInvokeVar =
         between (str_ws "(") (pstring ")") (sepBy (ws >>. mpExpB .>> ws) (pchar ','))
 
@@ -238,7 +240,22 @@ module Parser =
         .>>. pipe2 mpIdentifier mpInvokeVar (fun x y -> MpInvoke(x, y))
         |>> snd
 
-    let mpExpr = mpExpB <|> mpInvoke
+    let mpReservedFuncIdentifier1: Parser<string, unit> =
+        choice (reservedFunctions1 |> List.map pstring)
+
+    let mpReservedFunc1 =
+        pipe2 mpReservedFuncIdentifier1 (between (str_ws "(") (pstring ")") (ws >>. mpExpB .>> ws)) (fun x y ->
+            MpReservedFunc1(x, y))
+
+    let mpReservedFuncIdentifier0: Parser<string, unit> =
+        choice (reservedFunctions0 |> List.map pstring)
+
+    let mpReservedFunc0 =
+        pipe2 mpReservedFuncIdentifier0 (between (str_ws "(") (pstring ")") ws) (fun x _ -> MpReservedFunc0 x)
+
+    let mpReservedFunc = mpReservedFunc0 <|> mpReservedFunc1
+
+    let mpExpr = mpExpB <|> mpInvoke <|> mpReservedFunc
 
     let mpAssign =
         pipe3 mpIdentifier (str_ws "=") mpExpr (fun id _ e -> MpAssign(Set(id, e)))
@@ -287,9 +304,7 @@ module Parser =
     let mpReturn = pipe2 (str_ws "return") mpExpr (fun _ -> MpReturn)
 
     let mpInstruct =
-        [ mpAssign; mpAssignE; mpPrint; mpExprInstr; mpReturn ]
-        |> List.map attempt
-        |> choice
+        [ mpAssign; mpAssignE; mpExprInstr; mpReturn ] |> List.map attempt |> choice
 
     let mpBlockInstruct =
         [ mpWhile; mpFor; mpEnd; mpIf; mpElIf; mpElse; mpFunc ]
