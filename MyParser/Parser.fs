@@ -29,7 +29,7 @@ type value =
     | MpNull
     | MpBool of bool
     | MpInt of int
-    | MpFloat of float
+    | MpDouble of double
     | MpString of string
     | MpArrayValue of value[]
 
@@ -81,7 +81,7 @@ module Parser =
           "func" ]
 
     let reservedFunctions0 = [ "input" ]
-    let reservedFunctions1 = [ "printLn"; "printL"; "int"; "float"; "str" ]
+    let reservedFunctions1 = [ "printLn"; "printL"; "int"; "double"; "str" ]
 
     let (>>%) p x = p |>> (fun _ -> x)
 
@@ -139,7 +139,7 @@ module Parser =
                 if nl.IsInteger then
                     MpLiteral(MpInt(int nl.String))
                 else
-                    MpLiteral(MpFloat(float nl.String))
+                    MpLiteral(MpDouble(double nl.String))
 
     let ws: Parser<unit, unit> =
         skipManySatisfy (fun c -> c = ' ' || c = '\t' || c = '\r')

@@ -11,7 +11,7 @@ module Interpreter =
         match x with
         | :? bool as x -> MpBool x
         | :? int as x -> MpInt x
-        | :? double as x -> MpFloat x
+        | :? double as x -> MpDouble x
         | :? string as x -> MpString x
         | null -> MpNull
         | x -> raise (NotSupportedException(x.ToString()))
@@ -22,7 +22,7 @@ module Interpreter =
         let f x =
             match x with
             | MpInt x -> x
-            | MpFloat x -> int x
+            | MpDouble x -> int x
             | MpString x -> int x
             | MpNull -> 0
             | _ -> raise (NotSupportedException("Cannot convert to int"))
@@ -37,18 +37,18 @@ module Interpreter =
 
         f
 
-    let (|AsFloats|_|) =
+    let (|AsDoubles|_|) =
         function
-        | MpFloat l, MpFloat r -> Some(l, r)
-        | MpInt l, MpFloat r -> Some(float l, r)
-        | MpFloat l, MpInt r -> Some(l, float r)
+        | MpDouble l, MpDouble r -> Some(l, r)
+        | MpInt l, MpDouble r -> Some(double l, r)
+        | MpDouble l, MpInt r -> Some(l, double r)
         | _, _ -> None
 
     let compare lhs rhs =
         match lhs, rhs with
         | MpBool l, MpBool r -> l.CompareTo(r)
         | MpInt l, MpInt r -> l.CompareTo(r)
-        | AsFloats (l, r) -> l.CompareTo(r)
+        | AsDoubles (l, r) -> l.CompareTo(r)
         | MpString l, MpString r -> l.CompareTo(r)
         | _ -> raise (NotSupportedException $"%A{lhs} %A{rhs}")
 
@@ -115,13 +115,13 @@ module Interpreter =
     and arithmetic lhs op rhs =
         match op, (lhs, rhs) with
         | MpAdd, (MpInt l, MpInt r) -> MpInt(l + r)
-        | MpAdd, AsFloats (l, r) -> MpFloat(l + r)
+        | MpAdd, AsDoubles (l, r) -> MpDouble(l + r)
         | MpSubtract, (MpInt l, MpInt r) -> MpInt(l - r)
-        | MpSubtract, AsFloats (l, r) -> MpFloat(l - r)
+        | MpSubtract, AsDoubles (l, r) -> MpDouble(l - r)
         | MpMultiply, (MpInt l, MpInt r) -> MpInt(l * r)
-        | MpMultiply, AsFloats (l, r) -> MpFloat(l * r)
+        | MpMultiply, AsDoubles (l, r) -> MpDouble(l * r)
         | MpDivide, (MpInt l, MpInt r) -> MpInt(l - r)
-        | MpDivide, AsFloats (l, r) -> MpFloat(l - r)
+        | MpDivide, AsDoubles (l, r) -> MpDouble(l - r)
         | _ -> raise (NotSupportedException("Arithmetic operation is not supported"))
 
     and logical lhs op rhs =

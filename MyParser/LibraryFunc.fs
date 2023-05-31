@@ -7,7 +7,7 @@ module internal LibraryFunc =
     let rec toStr value =
         match value with
         | MpInt x -> string x
-        | MpFloat x -> string x
+        | MpDouble x -> string x
         | MpBool true -> "true"
         | MpBool false -> "false"
         | MpString x -> x
@@ -27,7 +27,7 @@ module internal LibraryFunc =
     let printL (value: value) : value =
         match value with
         | MpInt x -> printf $"%d{x}"
-        | MpFloat x -> printf $"%f{x}"
+        | MpDouble x -> printf $"%f{x}"
         | MpBool x -> printf $"%b{x}"
         | MpString x -> printf $"%s{x}"
         | MpNull -> printf "null"
@@ -49,21 +49,21 @@ module internal LibraryFunc =
     let toInt value =
         match value with
         | MpInt x -> MpInt x
-        | MpFloat x -> MpInt(int x)
+        | MpDouble x -> MpInt(int x)
         | MpBool true -> MpInt 1
         | MpBool false -> MpInt 0
         | MpString x -> MpInt(int x)
         | MpNull -> MpInt 0
         | MpArrayValue _ -> raise (NotSupportedException("Cannot convert from array to int"))
 
-    let toFloat value =
+    let toDouble value =
         match value with
-        | MpInt x -> MpFloat(float x)
-        | MpFloat x -> MpFloat x
-        | MpBool true -> MpFloat 1
-        | MpBool false -> MpFloat 0
-        | MpString x -> MpFloat(float x)
-        | MpNull -> MpFloat 0
+        | MpInt x -> MpDouble(double x)
+        | MpDouble x -> MpDouble x
+        | MpBool true -> MpDouble 1
+        | MpBool false -> MpDouble 0
+        | MpString x -> MpDouble(double x)
+        | MpNull -> MpDouble 0
         | MpArrayValue _ -> raise (NotSupportedException("Cannot convert from array to int"))
 
     let funcLib0 s =
@@ -76,6 +76,6 @@ module internal LibraryFunc =
         | "printL" -> printL value
         | "printLn" -> printLn value
         | "int" -> toInt value
-        | "float" -> toFloat value
+        | "double" -> toDouble value
         | "str" -> MpString(toStr value)
         | _ -> MpNull
