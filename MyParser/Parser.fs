@@ -81,7 +81,7 @@ module Parser =
           "func" ]
 
     let reservedFunctions0 = [ "input" ]
-    let reservedFunctions1 = [ "printLn"; "printL" ]
+    let reservedFunctions1 = [ "printLn"; "printL"; "int";"float";"str" ]
 
     let (>>%) p x = p |>> (fun _ -> x)
 
