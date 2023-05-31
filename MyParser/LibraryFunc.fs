@@ -11,6 +11,7 @@ module internal LibraryFunc =
         | MpBool true -> "true"
         | MpBool false -> "false"
         | MpString x -> x
+        | MpChar x -> string x
         | MpNull -> "null"
         | MpArrayValue x ->
             let mutable s = "[ "
@@ -30,6 +31,7 @@ module internal LibraryFunc =
         | MpDouble x -> printf $"%f{x}"
         | MpBool x -> printf $"%b{x}"
         | MpString x -> printf $"%s{x}"
+        | MpChar x -> printf $"%c{x}"
         | MpNull -> printf "null"
         | MpArrayValue _ -> printf $"%s{(toStr value)}"
 
@@ -53,6 +55,7 @@ module internal LibraryFunc =
         | MpBool true -> MpInt 1
         | MpBool false -> MpInt 0
         | MpString x -> MpInt(int x)
+        | MpChar x -> MpInt(int x)
         | MpNull -> MpInt 0
         | MpArrayValue _ -> raise (NotSupportedException("Cannot convert from array to int"))
 
@@ -63,6 +66,7 @@ module internal LibraryFunc =
         | MpBool true -> MpDouble 1
         | MpBool false -> MpDouble 0
         | MpString x -> MpDouble(double x)
+        | MpChar x -> MpDouble(double x)
         | MpNull -> MpDouble 0
         | MpArrayValue _ -> raise (NotSupportedException("Cannot convert from array to int"))
 

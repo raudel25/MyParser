@@ -31,6 +31,7 @@ type value =
     | MpInt of int
     | MpDouble of double
     | MpString of string
+    | MpChar of char
     | MpArrayValue of value[]
 
 type expr =
@@ -131,6 +132,16 @@ module Parser =
     let mpString: Parser<expr, unit> =
         quotedString <?> "quoted string" |>> MpString |>> MpLiteral
 
+    let quotedChar =
+        let quote = pchar '\'' <?> "quote"
+        let jChar = mpUnEscapedChar <|> mpEscapedChar <|> mpUnicodeChar
+
+        quote >>. jChar .>> quote
+
+    let mpChar: Parser<expr, unit> =
+        quotedChar <?> "quoted char" |>> MpChar |>> MpLiteral
+
+
     let mpNum: Parser<expr, unit> =
         let numberFormat = NumberLiteralOptions.AllowFraction
 
@@ -171,9 +182,9 @@ module Parser =
          .>>. mpIdentifier)
         |>> (fun (_, y) -> (MpVar y))
 
-    let mpValue = mpNum <|> mpString <|> mpNull <|> mpVar <|> mpBool
+    let mpValue = mpNum <|> mpString <|> mpNull <|> mpVar <|> mpBool <|> mpChar
 
-    let mpValueA = mpNum <|> mpVar
+    let mpValueA = mpNum <|> mpChar <|> mpVar
 
     let mpArrayL =
         (between (pchar '[') (pchar ']') (sepBy (ws >>. mpValue .>> ws) (pchar ',')))

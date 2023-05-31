@@ -97,7 +97,7 @@ module Interpreter =
                 variables[identifiers[i]] <- (eval state expr[i])
 
             mpRunAux (ProgramState(variables, functions, program)) start stop
-        | MpReservedFunc0 s -> funcLib0 s 
+        | MpReservedFunc0 s -> funcLib0 s
         | MpReservedFunc1 (s, expr) -> funcLib1 s (eval state expr)
 
     and comparison lhs op rhs =
@@ -115,8 +115,10 @@ module Interpreter =
     and arithmetic lhs op rhs =
         match op, (lhs, rhs) with
         | MpAdd, (MpInt l, MpInt r) -> MpInt(l + r)
+        | MpAdd, (MpChar l, MpChar r) -> MpChar(l + r)
         | MpAdd, AsDoubles (l, r) -> MpDouble(l + r)
         | MpSubtract, (MpInt l, MpInt r) -> MpInt(l - r)
+        | MpSubtract, (MpChar l, MpChar r) -> MpChar(l - r)
         | MpSubtract, AsDoubles (l, r) -> MpDouble(l - r)
         | MpMultiply, (MpInt l, MpInt r) -> MpInt(l * r)
         | MpMultiply, AsDoubles (l, r) -> MpDouble(l * r)
@@ -143,8 +145,15 @@ module Interpreter =
                 v[index]
             else
                 getIndices state v[index] indices (ind + 1)
+        | MpString v ->
+            if index < 0 || index >= v.Length then
+                raise (IndexOutOfRangeException())
 
-        | _ -> raise (NotSupportedException())
+            if ind = 0 && indices.Length = 1 then
+                MpChar v[index]
+            else
+                raise (NotSupportedException("The indexed value is not correct"))
+        | _ -> raise (NotSupportedException("The indexed value is not correct"))
 
     and setIndices (state: ProgramState) (value: value) (indices: expr list) ind (e: value) =
         let index = toInt (eval state indices[ind])
@@ -159,7 +168,7 @@ module Interpreter =
             else
                 setIndices state v[index] indices (ind + 1) e
 
-        | _ -> raise (NotSupportedException())
+        | _ -> raise (NotSupportedException("The indexed value is not correct"))
 
     and mpRunAux (state: ProgramState) pi pe =
         let (variables: VarLookup, func: FunctionsLookup, program: instruction[]) = state
