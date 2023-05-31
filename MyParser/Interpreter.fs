@@ -84,9 +84,24 @@ module Interpreter =
             | MpInt b -> MpArrayValue(Array.create b a)
             | _ -> raise (NotSupportedException("Cannot convert to int"))
         | MpIndex (identifier, indices) ->
+            if not (vars.ContainsKey(identifier)) then
+                raise (NotSupportedException("Variable does not exist"))
+
             let value = vars[identifier]
 
             getIndices state value indices 0
+        | MpSlice (identifier, start, stop) ->
+            if not (vars.ContainsKey(identifier)) then
+                raise (NotSupportedException("Variable does not exist"))
+
+            let start, stop = (eval state start, eval state stop)
+
+            let value = vars[identifier]
+
+            match (value, start, stop) with
+            | MpArrayValue v, MpInt start, MpInt stop -> MpArrayValue v[start .. stop - 1]
+            | MpString s, MpInt start, MpInt stop -> MpString s[start .. stop - 1]
+            | _ -> raise (NotSupportedException("Slice is not supported"))
 
         | MpNeg x -> arithmetic (eval state x) MpMultiply (MpInt(-1))
         | MpArithmetic (l, op, r) -> arithmetic (eval state l) op (eval state r)

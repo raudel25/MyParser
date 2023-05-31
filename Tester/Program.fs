@@ -9,11 +9,11 @@ let runParser (parser: Parser<_, unit>) (input: string) =
         Some result
     | Failure (_, _, _) -> None
 
-let input = "a()"
-let result = runParser mpInvoke input
+let input = "2:3"
+let result = runParser mpSliceInd input
 
 match result with
 | Some x -> printfn "Parsed %A" x
 | None -> printfn "Failed to parse"
 
-let a = mpRun (mpParse "a=[1+2;2-3]; printLn(a);")
+let a = mpRun (mpParse "a=[1+2;25]; s=\"12334\"; printLn(s[0:2]);")

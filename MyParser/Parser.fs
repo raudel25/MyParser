@@ -38,6 +38,7 @@ type expr =
     | MpIndex of identifier * expr list
     | MpArrayL of expr[]
     | MpArrayD of expr * expr
+    | MpSlice of identifier * expr * expr
     | MpLiteral of value
     | MpVar of identifier
     | MpNeg of expr
@@ -187,9 +188,12 @@ module Parser =
 
     let mpReservedFunc, mpReservedFuncR = createParserForwardedToRef ()
 
+    let mpSlice, mpSliceR = createParserForwardedToRef ()
+
     let mpValue =
         choice
-            [ attempt mpIndex
+            [ attempt mpSlice
+              attempt mpIndex
               attempt mpInvoke
               attempt mpReservedFunc
               mpNum
@@ -204,8 +208,6 @@ module Parser =
     let oppA = OperatorPrecedenceParser<expr, unit, unit>()
 
     let rec mpArithmetic = oppA.ExpressionParser
-
-    mpIndexR.Value <- pipe2 mpIdentifier (many1 (str_ws "[" >>. mpArithmetic .>> str_ws "]")) (fun x y -> MpIndex(x, y))
 
     let termA = (mpValue .>> ws) <|> between (str_ws "(") (str_ws ")") mpArithmetic
 
@@ -238,6 +240,14 @@ module Parser =
     oppL.AddOperator(InfixOperator("&&", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpAnd, y))))
     oppL.AddOperator(InfixOperator("||", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpOr, y))))
     oppL.AddOperator(InfixOperator("^^", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpXor, y))))
+
+    mpIndexR.Value <- pipe2 mpIdentifier (many1 (str_ws "[" >>. mpArithmetic .>> str_ws "]")) (fun x y -> MpIndex(x, y))
+
+    let mpSliceInd =
+        (pipe3 mpArithmetic (str_ws ":") mpArithmetic (fun x _ y -> (x, y)))
+
+    mpSliceR.Value <-
+        pipe4 mpIdentifier (str_ws "[") mpSliceInd (pstring "]") (fun s _ (x, y) _ -> MpSlice(s, x, y))
 
     let mpExpr = mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray
 
