@@ -1,6 +1,7 @@
 namespace MyParser
 
 open System
+open System.Collections.Generic
 open Microsoft.FSharp.Core
 
 module Interpreter =
@@ -67,9 +68,8 @@ module Interpreter =
         | MpString l, MpString r -> l.CompareTo(r)
         | _ -> raise (NotSupportedException $"%A{lhs} %A{rhs}")
 
-    open System.Collections.Generic
-
     type VarLookup = Dictionary<identifier, value>
+
 
     /// Evaluates expressions
     let rec eval state (expr: expr) =
@@ -86,17 +86,11 @@ module Interpreter =
                 newA[i] <- result
 
             MpArrayValue newA
-        | MpIndex (identifier, ind) ->
+        | MpIndex (identifier, indices) ->
             let value = vars[identifier]
-            let index = toInt (eval state ind)
 
-            match value with
-            | MpArrayValue v ->
-                if index < 0 || index >= v.Length then
-                    raise (IndexOutOfRangeException())
+            getIndices vars value indices 0
 
-                v[index]
-            | _ -> raise (NotSupportedException())
         | MpNeg x -> arithmetic (eval state x) MpMultiply (MpInt(-1))
         | MpArithmetic (l, op, r) -> arithmetic (eval state l) op (eval state r)
         | MpComparison (l, op, r) -> comparison (eval state l) op (eval state r)
@@ -133,6 +127,37 @@ module Interpreter =
         | MpXor, MpBool l, MpBool r -> MpBool((not l && r) || (not r && l))
         | _, _, _ -> raise (NotSupportedException())
 
+    and getIndices state (value: value) (indices: expr list) ind =
+        let index = toInt (eval state indices[ind])
+
+        match value with
+        | MpArrayValue v ->
+            if index < 0 || index >= v.Length then
+                raise (IndexOutOfRangeException())
+
+            if ind = indices.Length - 1 then
+                v[index]
+            else
+                getIndices state v[index] indices (ind + 1)
+
+        | _ -> raise (NotSupportedException())
+
+    let rec setIndices state (value: value) (indices: expr list) ind (e: value) =
+        let index = toInt (eval state indices[ind])
+
+        match value with
+        | MpArrayValue v ->
+            if index < 0 || index >= v.Length then
+                raise (IndexOutOfRangeException())
+
+            if ind = indices.Length - 1 then
+                v[index] <- e
+            else
+                setIndices state v[index] indices (ind + 1) e
+
+        | _ -> raise (NotSupportedException())
+
+
     let mpRun (program: instruction[]) =
         let mutable pi = 0
         let variables = VarLookup()
@@ -145,19 +170,12 @@ module Interpreter =
             | Set (identifier, expr) -> variables[identifier] <- evalAux expr
             | SetE (identifier, expr) ->
                 match identifier with
-                | MpIndex (identifier, ind) ->
+                | MpIndex (identifier, indices) ->
                     let value = variables[identifier]
-                    let index = toInt (eval variables ind)
 
-                    match value with
-                    | MpArrayValue v ->
-                        if index < 0 || index >= v.Length then
-                            raise (IndexOutOfRangeException())
+                    setIndices variables value indices 0 (evalAux expr)
 
-                        v[index] <- (eval variables expr)
-                    | _ -> raise (NotSupportedException())
                 | _ -> raise (NotSupportedException())
-
 
         let print (value: value) =
             match value with

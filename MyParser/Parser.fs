@@ -1,5 +1,7 @@
 ﻿namespace MyParser
 
+open Microsoft.FSharp.Collections
+
 type label = string
 type identifier = string
 type index = int
@@ -33,7 +35,7 @@ type value =
     | MpArrayValue of value[]
 
 type expr =
-    | MpIndex of identifier * expr
+    | MpIndex of identifier * expr list
     | MpArray of expr[]
     | MpLiteral of value
     | MpVar of identifier
@@ -55,6 +57,7 @@ type assign =
 type instruction =
     | MpPrint of expr
     | MpAssign of assign
+    | MpExpr of expr
     | MpFor of identifier * int * int * int
     | MpIf of expr
     | MpElIf of expr
@@ -185,12 +188,11 @@ module Parser =
 
     let rec mpArithmetic = oppA.ExpressionParser
 
-    and mpIndex =
-        pipe4 mpIdentifier (str_ws "[") (mpArithmetic .>> ws) (pstring "]") (fun x _ y _ -> MpIndex(x, y))
-
+    and mpGetIndex =
+        pipe2 mpIdentifier (many1 (str_ws "[" >>. mpArithmetic .>> str_ws "]")) (fun x y -> MpIndex(x, y))
 
     let termA =
-        ((mpValueA <|> mpIndex) .>> ws)
+        ((mpValueA <|> mpGetIndex) .>> ws)
         <|> between (str_ws "(") (str_ws ")") mpArithmetic
 
     oppA.TermParser <- termA
@@ -215,7 +217,7 @@ module Parser =
     let mpLogical = oppL.ExpressionParser
 
     let termL =
-        ((mpComparison <|> mpBool <|> mpVar) .>> ws)
+        ((mpComparison <|> mpBool) .>> ws)
         <|> between (str_ws "(") (str_ws ")") mpLogical
 
     oppL.TermParser <- termL
@@ -232,7 +234,7 @@ module Parser =
             MpAssign(Set(id, e)))
 
     let mpAssignE =
-        pipe3 (mpIndex .>> ws) (str_ws "=") (mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray) (fun id _ e ->
+        pipe3 (mpGetIndex .>> ws) (str_ws "=") (mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray) (fun id _ e ->
             MpAssign(SetE(id, e)))
 
     let mpRange =
@@ -252,7 +254,6 @@ module Parser =
         pipe5 (str_ws "elif") (str_ws "(") mpLogical (str_wsl ")") (pstring "{") (fun _ _ e _ _ -> MpElIf e)
 
     let mpElse = pipe2 (str_wsl "else") (pstring "{") (fun _ _ -> MpElse)
-
 
     let mpEnd: Parser<instruction, unit> = pstring "}" |>> (fun _ -> MpEnd)
     let mpInstruct = [ mpAssign; mpAssignE; mpPrint ] |> List.map attempt |> choice
