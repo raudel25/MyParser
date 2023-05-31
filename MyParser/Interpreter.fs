@@ -52,13 +52,19 @@ module Interpreter =
         | _ -> raise (NotSupportedException $"%A{lhs} %A{rhs}")
 
     type VarLookup = Dictionary<identifier, value>
+    type FunctionsLookup = Dictionary<identifier, identifier list * int * int>
+    type ProgramState = VarLookup * FunctionsLookup * instruction[]
 
-    let rec eval state (expr: expr) =
-        let (vars: VarLookup) = state
+    let rec eval (state: ProgramState) (expr: expr) =
+        let (vars: VarLookup, functions: FunctionsLookup, program: instruction[]) = state
 
         match expr with
         | MpLiteral x -> x
-        | MpVar identifier -> vars[identifier]
+        | MpVar identifier ->
+            if not (vars.ContainsKey(identifier)) then
+                raise (NotSupportedException("variable does not exist"))
+
+            vars[identifier]
         | MpArray a ->
             let newA = Array.create a.Length MpNull
 
@@ -70,12 +76,26 @@ module Interpreter =
         | MpIndex (identifier, indices) ->
             let value = vars[identifier]
 
-            getIndices vars value indices 0
+            getIndices state value indices 0
 
         | MpNeg x -> arithmetic (eval state x) MpMultiply (MpInt(-1))
         | MpArithmetic (l, op, r) -> arithmetic (eval state l) op (eval state r)
         | MpComparison (l, op, r) -> comparison (eval state l) op (eval state r)
         | MpLogical (l, op, r) -> logical (eval state l) op (eval state r)
+        | MpInvoke (s, expr) ->
+            if not (functions.ContainsKey(s)) then
+                raise (NotSupportedException("function does not exist"))
+
+            let variables = VarLookup()
+            let identifiers, start, stop = functions[s]
+
+            if identifiers.Length <> expr.Length then
+                raise (NotSupportedException("The function does not have all parameters"))
+
+            for i in 0 .. identifiers.Length - 1 do
+                variables[identifiers[i]] <- (eval state expr[i])
+
+            mpRunAux (ProgramState(variables, functions, program)) start stop
 
     and comparison lhs op rhs =
         let x = compare lhs rhs
@@ -108,7 +128,7 @@ module Interpreter =
         | MpXor, MpBool l, MpBool r -> MpBool((not l && r) || (not r && l))
         | _, _, _ -> raise (NotSupportedException("Logical operation is not supported"))
 
-    and getIndices state (value: value) (indices: expr list) ind =
+    and getIndices (state: ProgramState) (value: value) (indices: expr list) ind =
         let index = toInt (eval state indices[ind])
 
         match value with
@@ -123,7 +143,7 @@ module Interpreter =
 
         | _ -> raise (NotSupportedException())
 
-    let rec setIndices state (value: value) (indices: expr list) ind (e: value) =
+    and setIndices (state: ProgramState) (value: value) (indices: expr list) ind (e: value) =
         let index = toInt (eval state indices[ind])
 
         match value with
@@ -138,13 +158,13 @@ module Interpreter =
 
         | _ -> raise (NotSupportedException())
 
-
-    let mpRun (program: instruction[]) =
-        let mutable pi = 0
-        let variables = VarLookup()
+    and mpRunAux (state: ProgramState) pi pe =
+        let (variables: VarLookup, func: FunctionsLookup, program: instruction[]) = state
+        let mutable pi = pi
+        let mutable valueReturn = MpNull
         let forLoops = Dictionary<index, index * identifier * index * value>()
         let whileLoops = Dictionary<index, index>()
-        let evalAux = eval variables
+        let evalAux = eval state
 
         let assign (value: assign) =
             match value with
@@ -154,7 +174,7 @@ module Interpreter =
                 | MpIndex (identifier, indices) ->
                     let value = variables[identifier]
 
-                    setIndices variables value indices 0 (evalAux expr)
+                    setIndices state value indices 0 (evalAux expr)
 
                 | _ -> raise (NotSupportedException())
 
@@ -174,6 +194,7 @@ module Interpreter =
             | MpIf _ -> true
             | MpElIf _ -> true
             | MpElse -> true
+            | MpFunc _ -> true
             | _ -> false
 
         let endBlock instruction =
@@ -182,6 +203,9 @@ module Interpreter =
             | _ -> false
 
         let rec findEndBlock ind cant =
+            if ind >= program.Length then
+                raise (NotSupportedException("Excepted }"))
+
             let mutable newCant = cant
 
             if initBlock program[ind] then
@@ -193,6 +217,9 @@ module Interpreter =
             if newCant = 0 then ind else findEndBlock (ind + 1) newCant
 
         let rec findStartBlock ind cant =
+            if ind < 0 then
+                raise (NotSupportedException("Excepted {"))
+
             let mutable newCant = cant
 
             if initBlock program[ind] then
@@ -288,6 +315,26 @@ module Interpreter =
                 let _ = evalAux x
                 ()
 
-        while pi < program.Length do
+            | MpFunc (identifier, vars) ->
+                if func.ContainsKey(identifier) then
+                    raise (NotSupportedException("There are two functions wth the same name"))
+
+                let index = findEndBlock (pi + 1) 1
+                func[identifier] <- (vars, pi + 1, index)
+                pi <- index
+
+            | MpReturn expr ->
+                valueReturn <- evalAux expr
+                pi <- pe
+
+        while pi < pe do
             step ()
             pi <- pi + 1
+
+        valueReturn
+
+    let mpRun (program: instruction[]) =
+        let variables = VarLookup()
+        let func = FunctionsLookup()
+
+        mpRunAux (ProgramState(variables, func, program)) 0 program.Length

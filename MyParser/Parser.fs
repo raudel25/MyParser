@@ -43,12 +43,7 @@ type expr =
     | MpArithmetic of expr * arithmetic * expr
     | MpComparison of expr * comparison * expr
     | MpLogical of expr * logical * expr
-
-and location = Location of identifier * expr list
-
-and invoke =
-    | MpMethod of string * string * expr[]
-    | MpPropertyGet of string * string
+    | MpInvoke of identifier * expr list
 
 type assign =
     | Set of identifier * expr
@@ -56,6 +51,7 @@ type assign =
 
 type instruction =
     | MpPrint of expr
+    | MpFunc of identifier * identifier list
     | MpAssign of assign
     | MpExpr of expr
     | MpFor of identifier * int * int * int
@@ -64,11 +60,26 @@ type instruction =
     | MpElse
     | MpWhile of expr
     | MpEnd
+    | MpReturn of expr
 
 open System
 open FParsec
 
 module Parser =
+
+    let reservedWords =
+        [ "for"
+          "while"
+          "if"
+          "else"
+          "elif"
+          "func"
+          "print"
+          "true"
+          "false"
+          "array"
+          "return"
+          "func" ]
 
     let (>>%) p x = p |>> (fun _ -> x)
 
@@ -142,19 +153,6 @@ module Parser =
     let mpIdentifier: Parser<string, unit> =
         let isIdentifierFirstChar c = isLetter c || c = '_'
         let isIdentifierChar c = isLetter c || isDigit c || c = '_'
-
-        let reservedWords =
-            [ "for"
-              "while"
-              "if"
-              "else"
-              "elif"
-              "func"
-              "print"
-              "true"
-              "false"
-              "array" ]
-
         let reservedWord = choice (reservedWords |> List.map pstring)
 
         notFollowedBy reservedWord
@@ -165,7 +163,8 @@ module Parser =
     let mpIdentifier_ws = mpIdentifier .>> ws
 
     let mpVar: Parser<expr, unit> =
-        (notFollowedBy (mpIdentifier .>>. pstring "[") .>>. mpIdentifier)
+        (notFollowedBy (mpIdentifier .>>. (pstring "[" <|> pstring "("))
+         .>>. mpIdentifier)
         |>> (fun (_, y) -> (MpVar y))
 
     let mpValue = mpNum <|> mpString <|> mpNull <|> mpVar <|> mpBool
@@ -189,7 +188,9 @@ module Parser =
     let rec mpArithmetic = oppA.ExpressionParser
 
     and mpGetIndex =
-        pipe2 mpIdentifier (many1 (str_ws "[" >>. mpArithmetic .>> str_ws "]")) (fun x y -> MpIndex(x, y))
+        (notFollowedBy (mpIdentifier .>>. pstring "("))
+        .>>. pipe2 mpIdentifier (many1 (str_ws "[" >>. mpArithmetic .>> str_ws "]")) (fun x y -> MpIndex(x, y))
+        |>> snd
 
     let termA =
         ((mpValueA <|> mpGetIndex) .>> ws)
@@ -225,19 +226,27 @@ module Parser =
     oppL.AddOperator(InfixOperator("||", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpOr, y))))
     oppL.AddOperator(InfixOperator("^^", ws, 1, Assoc.Left, (fun x y -> MpLogical(x, MpXor, y))))
 
-    let mpPrint =
-        pipe3 (str_ws "print(") (mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray) (pstring ")") (fun _ e _ ->
-            MpPrint e)
+    let mpExpB = mpLogical <|> mpComparison <|> mpArithmetic <|> mpValue <|> mpArray
+
+    let mpPrint = pipe3 (str_ws "print(") mpExpB (pstring ")") (fun _ e _ -> MpPrint e)
+
+    let mpInvokeVar =
+        between (str_ws "(") (pstring ")") (sepBy (ws >>. mpExpB .>> ws) (pchar ','))
+
+    let mpInvoke =
+        (notFollowedBy (mpIdentifier .>>. pstring "["))
+        .>>. pipe2 mpIdentifier mpInvokeVar (fun x y -> MpInvoke(x, y))
+        |>> snd
+
+    let mpExpr = mpExpB <|> mpInvoke
 
     let mpAssign =
-        pipe3 mpIdentifier (str_ws "=") (mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray) (fun id _ e ->
-            MpAssign(Set(id, e)))
+        pipe3 mpIdentifier (str_ws "=") mpExpr (fun id _ e -> MpAssign(Set(id, e)))
 
     let mpAssignE =
-        pipe3 (mpGetIndex .>> ws) (str_ws "=") (mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray) (fun id _ e ->
-            MpAssign(SetE(id, e)))
+        pipe3 (mpGetIndex .>> ws) (str_ws "=") mpExpr (fun id _ e -> MpAssign(SetE(id, e)))
 
-    let mpExpr = mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray |>> MpExpr
+    let mpExprInstr = mpExpr |>> MpExpr
 
     let mpRange3 =
         pipe5 pint32 (str_ws ",") pint32 (str_ws ",") pint32 (fun x _ y _ z -> (x, y, z))
@@ -269,11 +278,23 @@ module Parser =
 
     let mpEnd: Parser<instruction, unit> = pstring "}" |>> (fun _ -> MpEnd)
 
+    let mpFuncVar =
+        between (str_ws "(") (pstring ")") (sepBy (ws >>. mpIdentifier .>> ws) (pchar ','))
+
+    let mpFunc =
+        pipe4 (str_ws "func") mpIdentifier mpFuncVar (str_wsl "{") (fun _ x y _ -> MpFunc(x, y))
+
+    let mpReturn = pipe2 (str_ws "return") mpExpr (fun _ -> MpReturn)
+
     let mpInstruct =
-        [ mpAssign; mpAssignE; mpPrint; mpExpr ] |> List.map attempt |> choice
+        [ mpAssign; mpAssignE; mpPrint; mpExprInstr; mpReturn ]
+        |> List.map attempt
+        |> choice
 
     let mpBlockInstruct =
-        [ mpWhile; mpFor; mpEnd; mpIf; mpElIf; mpElse ] |> List.map attempt |> choice
+        [ mpWhile; mpFor; mpEnd; mpIf; mpElIf; mpElse; mpFunc ]
+        |> List.map attempt
+        |> choice
 
     type Line =
         | Blank

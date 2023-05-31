@@ -9,11 +9,11 @@ let runParser (parser: Parser<_, unit>) (input: string) =
         Some result
     | Failure (_, _, _) -> None
 
-let input = "[1,4,true ]"
-let result = runParser mpArray input
+let input = "a()"
+let result = runParser mpInvoke input
 
 match result with
 | Some x -> printfn "Parsed %A" x
 | None -> printfn "Failed to parse"
 
-mpRun (mpParse "for i in 10,20 {print(i);}")
+let a=mpRun (mpParse "func a(n){ if(n==1){ return 1; } b=a(n-1); return n+b; } b=a(3); print(b);")
