@@ -55,7 +55,7 @@ module Interpreter =
         | _ -> raise (NotSupportedException $"%A{lhs} %A{rhs}")
 
     type VarLookup = Dictionary<identifier, value>
-    type FunctionsLookup = Dictionary<identifier, identifier list * int * int>
+    type FunctionsLookup = Dictionary<identifier, identifier list * List<identifier> * int * int>
     type ProgramState = VarLookup * FunctionsLookup * instruction[]
 
     let rec eval (state: ProgramState) (expr: expr) =
@@ -122,7 +122,7 @@ module Interpreter =
                 raise (NotSupportedException("Function does not exist"))
 
             let variables = VarLookup()
-            let identifiers, start, stop = functions[func]
+            let identifiers, globals, start, stop = functions[func]
 
             if identifiers.Length <> expr.Length then
                 raise (NotSupportedException("Function does not have all parameters"))
@@ -130,7 +130,15 @@ module Interpreter =
             for i in 0 .. identifiers.Length - 1 do
                 variables[identifiers[i]] <- (eval state expr[i])
 
-            mpRunAux (ProgramState(variables, functions, program)) start stop
+            for var in globals do
+                variables[var] <- vars[var]
+
+            let aux = mpRunAux (ProgramState(variables, functions, program)) start stop
+
+            for var in globals do
+                vars[var] <- variables[var]
+
+            aux
         | MpReservedFunc0 s -> funcLib0 s
         | MpReservedFunc1 (s, expr) -> funcLib1 s (eval state expr)
 
@@ -374,7 +382,26 @@ module Interpreter =
                     raise (NotSupportedException("There are two terms with the same name"))
 
                 let index = findEndBlock (pi + 1) 0
-                functions[identifier] <- (vars, pi + 1, index+1)
+                let globals = List<identifier>()
+
+                let contains var =
+                    let mutable q = false
+
+                    for i in vars do
+                        q <- q || i = var
+
+                    q
+
+                for i in variables do
+                    if not (contains i.Key) then
+                        globals.Add(i.Key)
+
+                functions[identifier] <- (vars, globals, pi + 1, index + 1)
+
+                for i in vars do
+                    if functions.ContainsKey(i) then
+                        raise (NotSupportedException("There are two terms with the same name"))
+
                 pi <- index
 
             | MpReturn expr ->
