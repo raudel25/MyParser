@@ -56,6 +56,8 @@ module Interpreter =
 
     type VarLookup = Dictionary<identifier, value>
     type FunctionsLookup = Dictionary<identifier, identifier list * List<identifier> * int * int>
+
+    type State = VarLookup * FunctionsLookup
     type ProgramState = VarLookup * FunctionsLookup * instruction[]
 
     let rec eval (state: ProgramState) (expr: expr) =
@@ -428,6 +430,27 @@ module Interpreter =
             pi <- pi + 1
 
         valueReturn
+
+    let mpState =
+        let variables = VarLookup()
+        let func = FunctionsLookup()
+
+        State(variables, func)
+
+    let mpInteractive (state: State) (program: instruction[]) start =
+        let variables, func = state
+
+        try
+            let _ = mpRunAux (ProgramState(variables, func, program)) start program.Length
+            program.Length
+        with
+        | :? Exception as ex ->
+            if ex.Message = "Excepted }" then
+                start
+            else
+                raise (NotSupportedException(ex.Message))
+        | _ -> raise (NotSupportedException())
+
 
     let mpRun (program: instruction[]) =
         let variables = VarLookup()

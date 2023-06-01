@@ -20,6 +20,20 @@ donde `<file>` es la ruta del archivo que contiene el código a ejecutar. Otra f
 dotnet run --project Compiler <file>
 ```
 
+también cuenta con una consola interactiva a la cual se puede acceder mediante el comando:
+
+```bash
+make
+```
+
+o
+
+```bash
+dotnet run --project Compiler
+```
+
+una vez en la consola interactiva puede escribir su programa y finalizar el mismo mediante los comandos `q`, `exit` o `quit`.
+
 ## Mini Lenguaje
 
 ### Tipos
