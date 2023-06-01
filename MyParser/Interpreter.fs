@@ -64,10 +64,13 @@ module Interpreter =
         match expr with
         | MpLiteral x -> x
         | MpVar identifier ->
-            if not (vars.ContainsKey(identifier)) then
-                raise (NotSupportedException("variable does not exist"))
+            if functions.ContainsKey(identifier) then
+                MpFuncValue identifier
+            else
+                if not (vars.ContainsKey(identifier)) then
+                    raise (NotSupportedException("variable does not exist"))
 
-            vars[identifier]
+                vars[identifier]
         | MpArrayL a ->
             let newA = Array.create a.Length MpNull
 
@@ -108,11 +111,18 @@ module Interpreter =
         | MpComparison (l, op, r) -> comparison (eval state l) op (eval state r)
         | MpLogical (l, op, r) -> logical (eval state l) op (eval state r)
         | MpInvoke (s, expr) ->
-            if not (functions.ContainsKey(s)) then
+            let mutable func = s
+
+            if vars.ContainsKey(s) then
+                match vars[s] with
+                | MpFuncValue q -> func <- q
+                | _ -> raise (NotSupportedException("Variable is not function"))
+
+            if not (functions.ContainsKey(func)) then
                 raise (NotSupportedException("Function does not exist"))
 
             let variables = VarLookup()
-            let identifiers, start, stop = functions[s]
+            let identifiers, start, stop = functions[func]
 
             if identifiers.Length <> expr.Length then
                 raise (NotSupportedException("Function does not have all parameters"))
@@ -198,7 +208,7 @@ module Interpreter =
         | _ -> raise (NotSupportedException("The indexed value is not correct"))
 
     and mpRunAux (state: ProgramState) pi pe =
-        let (variables: VarLookup, func: FunctionsLookup, program: instruction[]) = state
+        let (variables: VarLookup, functions: FunctionsLookup, program: instruction[]) = state
         let mutable pi = pi
         let mutable valueReturn = MpNull
         let loops = Stack<index * index>()
@@ -206,7 +216,11 @@ module Interpreter =
 
         let assign (value: assign) =
             match value with
-            | Set (identifier, expr) -> variables[identifier] <- evalAux expr
+            | Set (identifier, expr) ->
+                if functions.ContainsKey(identifier) then
+                    raise (NotSupportedException("There are two terms with the same name"))
+
+                variables[identifier] <- evalAux expr
             | SetE (identifier, expr) ->
                 match identifier with
                 | MpIndex (identifier, indices) ->
@@ -371,11 +385,11 @@ module Interpreter =
                 ()
 
             | MpFunc (identifier, vars) ->
-                if func.ContainsKey(identifier) then
-                    raise (NotSupportedException("There are two functions wth the same name"))
+                if functions.ContainsKey(identifier) || variables.ContainsKey(identifier) then
+                    raise (NotSupportedException("There are two terms with the same name"))
 
                 let index = findEndBlock (pi + 1) 1
-                func[identifier] <- (vars, pi + 1, index)
+                functions[identifier] <- (vars, pi + 1, index)
                 pi <- index
 
             | MpReturn expr ->

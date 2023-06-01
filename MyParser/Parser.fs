@@ -34,6 +34,7 @@ type value =
     | MpString of string
     | MpChar of char
     | MpArrayValue of value[]
+    | MpFuncValue of identifier
 
 type expr =
     | MpIndex of identifier * expr list

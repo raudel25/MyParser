@@ -13,6 +13,7 @@ module internal LibraryFunc =
         | MpString x -> x
         | MpChar x -> string x
         | MpNull -> "null"
+        | MpFuncValue s -> s
         | MpArrayValue x ->
             let mutable s = "[ "
 
@@ -34,6 +35,7 @@ module internal LibraryFunc =
         | MpChar x -> printf $"%c{x}"
         | MpNull -> printf "null"
         | MpArrayValue _ -> printf $"%s{(toStr value)}"
+        | MpFuncValue s -> printf $"%s{s}"
 
         MpNull
 
@@ -57,7 +59,7 @@ module internal LibraryFunc =
         | MpString x -> MpInt(int x)
         | MpChar x -> MpInt(int x)
         | MpNull -> MpInt 0
-        | MpArrayValue _ -> raise (NotSupportedException("Cannot convert from array to int"))
+        | _ -> raise (NotSupportedException("Cannot convert from array to int"))
 
     let toDouble value =
         match value with
@@ -68,7 +70,7 @@ module internal LibraryFunc =
         | MpString x -> MpDouble(double x)
         | MpChar x -> MpDouble(double x)
         | MpNull -> MpDouble 0
-        | MpArrayValue _ -> raise (NotSupportedException("Cannot convert from array to int"))
+        | _ -> raise (NotSupportedException("Cannot convert to double"))
 
     let funcLib0 s =
         match s with
