@@ -76,7 +76,7 @@ elif (4 > 3)
 }
 else
 {
-    printLn("2 no es mayor que 3, ni 4 es mayor que 3")
+    printLn("2 no es mayor que 3, ni 4 es mayor que 3");
 }
 ```
 

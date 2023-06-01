@@ -208,7 +208,9 @@ module Interpreter =
         | _ -> raise (NotSupportedException("The indexed value is not correct"))
 
     and mpRunAux (state: ProgramState) pi pe =
-        let (variables: VarLookup, functions: FunctionsLookup, program: instruction[]) = state
+        let (variables: VarLookup, functions: FunctionsLookup, program: instruction[]) =
+            state
+
         let mutable pi = pi
         let mutable valueReturn = MpNull
         let loops = Stack<index * index>()
@@ -232,12 +234,7 @@ module Interpreter =
 
         let initBlock instruction =
             match instruction with
-            | MpWhile _ -> true
-            | MpFor _ -> true
-            | MpIf _ -> true
-            | MpElIf _ -> true
-            | MpElse -> true
-            | MpFunc _ -> true
+            | MpStart -> true
             | _ -> false
 
         let endBlock instruction =
@@ -260,7 +257,7 @@ module Interpreter =
             if newCant = 0 then ind else findEndBlock (ind + 1) newCant
 
         let rec findStartBlock ind cant =
-            if ind < 0 then
+            if ind < 1 then
                 raise (NotSupportedException("Excepted {"))
 
             let mutable newCant = cant
@@ -286,46 +283,39 @@ module Interpreter =
                 let condition = toBool (evalAux cond)
 
                 if not condition then
-                    let index = findEndBlock (pi + 1) 1
+                    let index = findEndBlock (pi + 1) 0
                     pi <- index
 
             | MpElse ->
                 let indexStart = findStartBlock (pi - 1) 0
 
-                match program[indexStart] with
-                | MpIf cond ->
+                let execute cond =
                     let condition = toBool (evalAux cond)
 
                     if condition then
-                        let indexEnd = findEndBlock (pi + 1) 1
-                        pi <- indexEnd
-                | MpElIf cond ->
-                    let condition = toBool (evalAux cond)
+                        let index = findEndBlock (pi + 1) 0
+                        pi <- index
 
-                    if condition then
-                        let indexEnd = findEndBlock (pi + 1) 1
-                        pi <- indexEnd
-                | _ -> raise (NotSupportedException())
+                match program[indexStart - 1] with
+                | MpIf cond -> execute cond
+                | MpElIf cond -> execute cond
+                | _ -> raise (NotSupportedException("Excepted else"))
 
             | MpElIf condEl ->
                 let indexStart = findStartBlock (pi - 1) 0
 
-                match program[indexStart] with
-                | MpIf condIf ->
+                let execute condIf =
                     let conditionIf = toBool (evalAux condIf)
                     let conditionEl = toBool (evalAux condEl)
 
                     if (conditionIf || not conditionEl) then
-                        let indexEnd = findEndBlock (pi + 1) 1
+                        let indexEnd = findEndBlock (pi + 1) 0
                         pi <- indexEnd
-                | MpElIf condIf ->
-                    let conditionIf = toBool (evalAux condIf)
-                    let conditionEl = toBool (evalAux condEl)
 
-                    if (conditionIf || not conditionEl) then
-                        let indexEnd = findEndBlock (pi + 1) 1
-                        pi <- indexEnd
-                | _ -> raise (NotSupportedException())
+                match program[indexStart - 1] with
+                | MpIf condIf -> execute condIf
+                | MpElIf condIf -> execute condIf
+                | _ -> raise (NotSupportedException("Excepted elif"))
 
             | MpFor (identifier, init, stop, step) ->
                 let init, stop, step = (evalAux init, evalAux stop, evalAux step)
@@ -334,17 +324,18 @@ module Interpreter =
                 | MpInt init, MpInt stop, MpInt step ->
                     let mutable index = 0
 
-                    if loops.Count = 0 then
+                    let execute () =
                         assign (Set(identifier, MpLiteral(MpInt init)))
-                        index <- findEndBlock (pi + 1) 1
+                        index <- findEndBlock (pi + 1) 0
                         loops.Push((pi, index))
+
+                    if loops.Count = 0 then
+                        execute ()
                     else
                         let piAux, indexAux = loops.Peek()
 
                         if piAux <> pi then
-                            assign (Set(identifier, MpLiteral(MpInt init)))
-                            index <- findEndBlock (pi + 1) 1
-                            loops.Push((pi, index))
+                            execute ()
                         else
                             variables[identifier] <- arithmetic variables[identifier] MpAdd (MpInt step)
                             index <- indexAux
@@ -357,29 +348,23 @@ module Interpreter =
             | MpWhile condition ->
                 let mutable index = 0
 
-                if loops.Count = 0 then
-                    index <- findEndBlock (pi + 1) 1
+                let execute () =
+                    index <- findEndBlock (pi + 1) 0
                     loops.Push((pi, index))
+
+                if loops.Count = 0 then
+                    execute ()
                 else
                     let piAux, indexAux = loops.Peek()
 
-                    if piAux <> pi then
-                        index <- findEndBlock (pi + 1) 1
-                        loops.Push((pi, index))
-                    else
-                        index <- indexAux
+                    if piAux <> pi then execute () else index <- indexAux
 
                 if evalAux condition |> toBool |> not then
                     let _ = loops.Pop()
                     pi <- index
 
-            | MpEnd ->
-                if loops.Count <> 0 then
-                    let piAux, index = loops.Peek()
-
-                    if index = pi then
-                        pi <- piAux - 1
-
+            | MpStart -> ()
+            | MpEnd -> ()
             | MpExpr x ->
                 let _ = evalAux x
                 ()
@@ -388,8 +373,8 @@ module Interpreter =
                 if functions.ContainsKey(identifier) || variables.ContainsKey(identifier) then
                     raise (NotSupportedException("There are two terms with the same name"))
 
-                let index = findEndBlock (pi + 1) 1
-                functions[identifier] <- (vars, pi + 1, index)
+                let index = findEndBlock (pi + 1) 0
+                functions[identifier] <- (vars, pi + 1, index+1)
                 pi <- index
 
             | MpReturn expr ->
@@ -406,6 +391,13 @@ module Interpreter =
 
         while pi < pe do
             step ()
+
+            if loops.Count <> 0 then
+                let piAux, index = loops.Peek()
+
+                if index = pi then
+                    pi <- piAux - 1
+
             pi <- pi + 1
 
         valueReturn

@@ -64,6 +64,7 @@ type instruction =
     | MpElIf of expr
     | MpElse
     | MpWhile of expr
+    | MpStart
     | MpEnd
     | MpReturn of expr
     | MpBreak
@@ -306,19 +307,20 @@ module Parser =
     let mpRange = attempt mpRange3 <|> attempt mpRange2 <|> attempt mpRange1
 
     let mpWhile =
-        pipe5 (str_ws "while") (str_ws "(") mpLogical (str_wsl ")") (pstring "{") (fun _ _ e _ _ -> MpWhile e)
+        pipe4 (str_ws "while") (str_ws "(") mpLogical (str_ws ")") (fun _ _ e _ -> MpWhile e)
 
     let mpFor: Parser<instruction, unit> =
-        pipe5 (str_ws "for") mpIdentifier_ws (str_ws "in") mpRange (wsl >>. pstring "{") (fun _ s _ (x, y, z) _ ->
-            MpFor(s, x, y, z))
+        pipe4 (str_ws "for") mpIdentifier_ws (str_ws "in") mpRange (fun _ s _ (x, y, z) -> MpFor(s, x, y, z))
 
     let mpIf =
-        pipe5 (str_ws "if") (str_ws "(") mpLogical (str_wsl ")") (pstring "{") (fun _ _ e _ _ -> MpIf e)
+        pipe4 (str_ws "if") (str_ws "(") mpLogical (str_ws ")") (fun _ _ e _ -> MpIf e)
 
     let mpElIf =
-        pipe5 (str_ws "elif") (str_ws "(") mpLogical (str_wsl ")") (pstring "{") (fun _ _ e _ _ -> MpElIf e)
+        pipe4 (str_ws "elif") (str_ws "(") mpLogical (str_ws ")") (fun _ _ e _ -> MpElIf e)
 
-    let mpElse = pipe2 (str_wsl "else") (pstring "{") (fun _ _ -> MpElse)
+    let mpElse = pstring "else" |>> (fun _ -> MpElse)
+
+    let mpStart: Parser<instruction, unit> = pstring "{" |>> (fun _ -> MpStart)
 
     let mpEnd: Parser<instruction, unit> = pstring "}" |>> (fun _ -> MpEnd)
 
@@ -326,7 +328,7 @@ module Parser =
         between (str_ws "(") (pstring ")") (sepBy (ws >>. mpIdentifier .>> ws) (pchar ','))
 
     let mpFunc =
-        pipe4 (str_ws "func") mpIdentifier mpFuncVar (wsl >>. pstring "{") (fun _ x y _ -> MpFunc(x, y))
+        pipe3 (str_ws "func") mpIdentifier mpFuncVar (fun _ x y -> MpFunc(x, y))
 
     let mpReturnValue = pipe2 (str_ws "return") mpExpr (fun _ -> MpReturn)
 
@@ -342,7 +344,7 @@ module Parser =
         |> choice
 
     let mpBlockInstruct =
-        [ mpWhile; mpFor; mpEnd; mpIf; mpElIf; mpElse; mpFunc ]
+        [ mpWhile; mpFor; mpStart; mpEnd; mpIf; mpElIf; mpElse; mpFunc ]
         |> List.map attempt
         |> choice
 
