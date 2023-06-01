@@ -201,9 +201,7 @@ module Interpreter =
         let (variables: VarLookup, func: FunctionsLookup, program: instruction[]) = state
         let mutable pi = pi
         let mutable valueReturn = MpNull
-        let forLoops = Dictionary<index, index * identifier * index * value>()
-        let whileLoops = Dictionary<index, index>()
-        let loops = Stack<index>()
+        let loops = Stack<index * index>()
         let evalAux = eval state
 
         let assign (value: assign) =
@@ -320,11 +318,22 @@ module Interpreter =
 
                 match (init, stop, step) with
                 | MpInt init, MpInt stop, MpInt step ->
-                    assign (Set(identifier, MpLiteral(MpInt init)))
+                    let mutable index = 0
 
-                    let index = findEndBlock (pi + 1) 1
-                    forLoops[index] <- (pi, identifier, stop, MpInt step)
-                    loops.Push(index)
+                    if loops.Count = 0 then
+                        assign (Set(identifier, MpLiteral(MpInt init)))
+                        index <- findEndBlock (pi + 1) 1
+                        loops.Push((pi, index))
+                    else
+                        let piAux, indexAux = loops.Peek()
+
+                        if piAux <> pi then
+                            assign (Set(identifier, MpLiteral(MpInt init)))
+                            index <- findEndBlock (pi + 1) 1
+                            loops.Push((pi, index))
+                        else
+                            variables[identifier] <- arithmetic variables[identifier] MpAdd (MpInt step)
+                            index <- indexAux
 
                     if toInt variables[identifier] >= stop then
                         let _ = loops.Pop()
@@ -332,24 +341,30 @@ module Interpreter =
                 | _ -> raise (NotSupportedException("Cannot convert to int"))
 
             | MpWhile condition ->
-                let index = findEndBlock (pi + 1) 1
-                whileLoops[index] <- pi
-                loops.Push(index)
+                let mutable index = 0
+
+                if loops.Count = 0 then
+                    index <- findEndBlock (pi + 1) 1
+                    loops.Push((pi, index))
+                else
+                    let piAux, indexAux = loops.Peek()
+
+                    if piAux <> pi then
+                        index <- findEndBlock (pi + 1) 1
+                        loops.Push((pi, index))
+                    else
+                        index <- indexAux
 
                 if evalAux condition |> toBool |> not then
                     let _ = loops.Pop()
                     pi <- index
+
             | MpEnd ->
-                if whileLoops.ContainsKey(pi) then
-                    pi <- whileLoops[pi] - 1
+                if loops.Count <> 0 then
+                    let piAux, index = loops.Peek()
 
-                if forLoops.ContainsKey(pi) then
-                    let start, identifier, stop, step = forLoops[pi]
-                    let x = variables[identifier]
-                    variables[identifier] <- arithmetic x MpAdd step
-
-                    if toInt variables[identifier] < stop then
-                        pi <- start
+                    if index = pi then
+                        pi <- piAux - 1
 
             | MpExpr x ->
                 let _ = evalAux x
@@ -371,9 +386,9 @@ module Interpreter =
                 if loops.Count = 0 then
                     raise (NotSupportedException("Except break"))
 
-                let aux = loops.Peek()
+                let _, index = loops.Peek()
                 let _ = loops.Pop()
-                pi <- aux
+                pi <- index
 
         while pi < pe do
             step ()
