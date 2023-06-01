@@ -12,6 +12,12 @@ static class Program
             return;
         }
 
+        if (!File.Exists(args[0]))
+        {
+            Console.WriteLine("File does not exist");
+            return;
+        }
+
         var programSrc = File.ReadAllText(args[0]);
 
         var program = Parser.mpParse(programSrc);
@@ -32,12 +38,12 @@ static class Program
 
             if (instr is "q" or "quit" or "exit") break;
 
-            var newProgram = Parser.mpParse(instr);
-
-            program = program.Concat(newProgram).ToArray();
-
             try
             {
+                var newProgram = Parser.mpParse(instr);
+
+                program = program.Concat(newProgram).ToArray();
+
                 start = Interpreter.mpInteractive(stateVar, stateFunc, program, start);
             }
             catch (Exception e)

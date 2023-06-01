@@ -6,6 +6,9 @@ open Microsoft.FSharp.Core
 open MyParser.LibraryFunc
 
 module Interpreter =
+    
+    let error (s:string)=
+        $"Error in execution: {s}"
 
     let fromObj (x: obj) =
         match x with
@@ -15,7 +18,7 @@ module Interpreter =
         | :? string as x -> MpString x
         | :? char as x -> MpChar x
         | null -> MpNull
-        | x -> raise (NotSupportedException(x.ToString()))
+        | x -> raise (Exception(error(x.ToString())))
 
 
 
@@ -26,7 +29,7 @@ module Interpreter =
             | MpDouble x -> int x
             | MpString x -> int x
             | MpNull -> 0
-            | _ -> raise (NotSupportedException("Cannot convert to int"))
+            | _ -> raise (Exception(error "Cannot convert to int"))
 
         f
 
@@ -34,7 +37,7 @@ module Interpreter =
         let f x =
             match x with
             | MpBool x -> x
-            | _ -> raise (NotSupportedException("Cannot convert to bool"))
+            | _ -> raise (Exception(error "Cannot convert to bool"))
 
         f
 
@@ -52,7 +55,7 @@ module Interpreter =
         | AsDoubles (l, r) -> l.CompareTo(r)
         | MpString l, MpString r -> l.CompareTo(r)
         | MpChar l, MpChar r -> l.CompareTo(r)
-        | _ -> raise (NotSupportedException $"%A{lhs} %A{rhs}")
+        | _ -> raise (Exception (error $"%A{lhs} %A{rhs}"))
 
     type VarLookup = Dictionary<identifier, value>
     type FunctionsLookup = Dictionary<identifier, identifier list * List<identifier> * int * int>
@@ -70,7 +73,7 @@ module Interpreter =
                 MpFuncValue identifier
             else
                 if not (vars.ContainsKey(identifier)) then
-                    raise (NotSupportedException("variable does not exist"))
+                    raise (Exception(error "Variable does not exist"))
 
                 vars[identifier]
         | MpArrayL a ->
@@ -87,17 +90,17 @@ module Interpreter =
 
             match b with
             | MpInt b -> MpArrayValue(Array.create b a)
-            | _ -> raise (NotSupportedException("Cannot convert to int"))
+            | _ -> raise (Exception(error "Cannot convert to int"))
         | MpIndex (identifier, indices) ->
             if not (vars.ContainsKey(identifier)) then
-                raise (NotSupportedException("Variable does not exist"))
+                raise (Exception(error "Variable does not exist"))
 
             let value = vars[identifier]
 
             getIndices state value indices 0
         | MpSlice (identifier, start, stop) ->
             if not (vars.ContainsKey(identifier)) then
-                raise (NotSupportedException("Variable does not exist"))
+                raise (Exception(error "Variable does not exist"))
 
             let start, stop = (eval state start, eval state stop)
 
@@ -106,7 +109,7 @@ module Interpreter =
             match (value, start, stop) with
             | MpArrayValue v, MpInt start, MpInt stop -> MpArrayValue v[start .. stop - 1]
             | MpString s, MpInt start, MpInt stop -> MpString s[start .. stop - 1]
-            | _ -> raise (NotSupportedException("Slice is not supported"))
+            | _ -> raise (Exception(error "Slice is not supported"))
 
         | MpNeg x -> arithmetic (eval state x) MpMultiply (MpInt(-1))
         | MpArithmetic (l, op, r) -> arithmetic (eval state l) op (eval state r)
@@ -118,16 +121,16 @@ module Interpreter =
             if vars.ContainsKey(s) then
                 match vars[s] with
                 | MpFuncValue q -> func <- q
-                | _ -> raise (NotSupportedException("Variable is not function"))
+                | _ -> raise (Exception(error "Variable is not function"))
 
             if not (functions.ContainsKey(func)) then
-                raise (NotSupportedException("Function does not exist"))
+                raise (Exception(error "Function does not exist"))
 
             let variables = VarLookup()
             let identifiers, globals, start, stop = functions[func]
 
             if identifiers.Length <> expr.Length then
-                raise (NotSupportedException("Function does not have all parameters"))
+                raise (Exception(error "Function does not have correct parameters"))
 
             for i in 0 .. identifiers.Length - 1 do
                 variables[identifiers[i]] <- (eval state expr[i])
@@ -171,14 +174,14 @@ module Interpreter =
         | MpDivide, (MpInt l, MpInt r) -> MpInt(l - r)
         | MpDivide, AsDoubles (l, r) -> MpDouble(l - r)
         | MpRest, (MpInt l, MpInt r) -> MpInt(l % r)
-        | _ -> raise (NotSupportedException("Arithmetic operation is not supported"))
+        | _ -> raise (Exception(error "Arithmetic operation is not supported"))
 
     and logical lhs op rhs =
         match op, lhs, rhs with
         | MpAnd, MpBool l, MpBool r -> MpBool(l && r)
         | MpOr, MpBool l, MpBool r -> MpBool(l || r)
         | MpXor, MpBool l, MpBool r -> MpBool((not l && r) || (not r && l))
-        | _, _, _ -> raise (NotSupportedException("Logical operation is not supported"))
+        | _, _, _ -> raise (Exception(error "Logical operation is not supported"))
 
     and getIndices (state: ProgramState) (value: value) (indices: expr list) ind =
         let index = toInt (eval state indices[ind])
@@ -199,8 +202,8 @@ module Interpreter =
             if ind = 0 && indices.Length = 1 then
                 MpChar v[index]
             else
-                raise (NotSupportedException("The indexed value is not correct"))
-        | _ -> raise (NotSupportedException("The indexed value is not correct"))
+                raise (Exception(error "The indexed value is not correct"))
+        | _ -> raise (Exception(error "The indexed value is not correct"))
 
     and setIndices (state: ProgramState) (value: value) (indices: expr list) ind (e: value) =
         let index = toInt (eval state indices[ind])
@@ -215,7 +218,7 @@ module Interpreter =
             else
                 setIndices state v[index] indices (ind + 1) e
 
-        | _ -> raise (NotSupportedException("The indexed value is not correct"))
+        | _ -> raise (Exception(error "The indexed value is not correct"))
 
     and mpRunAux (state: ProgramState) pi pe =
         let (variables: VarLookup, functions: FunctionsLookup, program: instruction[]) =
@@ -230,7 +233,7 @@ module Interpreter =
             match value with
             | Set (identifier, expr) ->
                 if functions.ContainsKey(identifier) then
-                    raise (NotSupportedException("There are two terms with the same name"))
+                    raise (Exception(error "There are two terms with the same name"))
 
                 variables[identifier] <- evalAux expr
             | SetE (identifier, expr) ->
@@ -240,7 +243,7 @@ module Interpreter =
 
                     setIndices state value indices 0 (evalAux expr)
 
-                | _ -> raise (NotSupportedException())
+                | _ -> ()
 
         let initBlock instruction =
             match instruction with
@@ -254,7 +257,7 @@ module Interpreter =
 
         let rec findEndBlock ind cant =
             if ind >= program.Length then
-                raise (NotSupportedException("Excepted }"))
+                raise (Exception(error "Excepted }"))
 
             let mutable newCant = cant
 
@@ -268,7 +271,7 @@ module Interpreter =
 
         let rec findStartBlock ind cant =
             if ind < 1 then
-                raise (NotSupportedException("Excepted {"))
+                raise (Exception(error "Excepted {"))
 
             let mutable newCant = cant
 
@@ -353,7 +356,7 @@ module Interpreter =
                     if toInt variables[identifier] >= stop then
                         let _ = loops.Pop()
                         pi <- index
-                | _ -> raise (NotSupportedException("Cannot convert to int"))
+                | _ -> raise (Exception(error "Cannot convert to int"))
 
             | MpWhile condition ->
                 let mutable index = 0
@@ -381,7 +384,7 @@ module Interpreter =
 
             | MpFunc (identifier, vars) ->
                 if functions.ContainsKey(identifier) || variables.ContainsKey(identifier) then
-                    raise (NotSupportedException("There are two terms with the same name"))
+                    raise (Exception(error "There are two terms with the same name"))
 
                 let index = findEndBlock (pi + 1) 0
                 let globals = List<identifier>()
@@ -402,7 +405,7 @@ module Interpreter =
 
                 for i in vars do
                     if functions.ContainsKey(i) then
-                        raise (NotSupportedException("There are two terms with the same name"))
+                        raise (Exception(error "There are two terms with the same name"))
 
                 pi <- index
 
@@ -412,7 +415,7 @@ module Interpreter =
 
             | MpBreak ->
                 if loops.Count = 0 then
-                    raise (NotSupportedException("Except break"))
+                    raise (Exception(error "Except break"))
 
                 let _, index = loops.Peek()
                 let _ = loops.Pop()
@@ -448,8 +451,8 @@ module Interpreter =
             if ex.Message = "Excepted }" then
                 start
             else
-                raise (NotSupportedException(ex.Message))
-        | _ -> raise (NotSupportedException())
+                raise (Exception(ex.Message))
+        | _ -> raise (Exception())
 
 
     let mpRun (program: instruction[]) =
