@@ -92,9 +92,8 @@ module Parser =
 
     let (>>%) p x = p |>> (fun _ -> x)
 
-    let mpPosition mp = mp .>>. getPosition
-
-    let constExpr v p = v, p
+    let mpPosition mp =
+        getPosition .>>. mp |>> (fun (x, y) -> (y, x))
 
     let mpNull: Parser<expr, unit> =
         pstring "null" >>% MpNull <?> "null" |>> MpLiteral |> mpPosition
@@ -321,40 +320,40 @@ module Parser =
     let mpRange = attempt mpRange3 <|> attempt mpRange2 <|> attempt mpRange1
 
     let mpWhile =
-        pipe5 (str_ws "while") (str_ws "(") mpLogical (str_ws ")") getPosition (fun _ _ e _ p -> MpWhile(e, p))
+        pipe5 getPosition (str_ws "while") (str_ws "(") mpLogical (str_ws ")") (fun p _ _ e _ -> MpWhile(e, p))
 
     let mpFor: Parser<instruction, unit> =
-        pipe5 (str_ws "for") mpIdentifier_ws (str_ws "in") mpRange getPosition (fun _ s _ (x, y, z) p ->
+        pipe5 getPosition (str_ws "for") mpIdentifier_ws (str_ws "in") mpRange  (fun p _ s _ (x, y, z) ->
             MpFor(s, x, y, z, p))
 
     let mpIf =
-        pipe5 (str_ws "if") (str_ws "(") mpLogical (str_ws ")") getPosition (fun _ _ e _ p -> MpIf(e, p))
+        pipe5 getPosition (str_ws "if") (str_ws "(") mpLogical (str_ws ")") (fun p _ _ e _ -> MpIf(e, p))
 
     let mpElIf =
-        pipe5 (str_ws "elif") (str_ws "(") mpLogical (str_ws ")") getPosition (fun _ _ e _ p -> MpElIf(e, p))
+        pipe5 getPosition (str_ws "elif") (str_ws "(") mpLogical (str_ws ")")  (fun p _ _ e _ -> MpElIf(e, p))
 
-    let mpElse = (pstring "else" .>>. getPosition) |>> (fun (_, p) -> MpElse p)
+    let mpElse = (getPosition.>>.pstring "else" ) |>> (fun (p, _) -> MpElse p)
 
     let mpStart: Parser<instruction, unit> = pstring "{" |>> (fun _ -> MpStart)
 
     let mpEnd: Parser<instruction, unit> = pstring "}" |>> (fun _ -> MpEnd)
 
     let mpFuncVar =
-        between (str_ws "(") (pstring ")") (sepBy (ws >>. mpIdentifier .>>. getPosition .>> ws) (pchar ','))
+        between (str_ws "(") (pstring ")") (sepBy ((ws >>. getPosition.>>.mpIdentifier  .>> ws)|>>(fun (x,y)->(y,x))) (pchar ','))
 
     let mpFunc =
-        pipe4 (str_ws "func") mpIdentifier mpFuncVar getPosition (fun _ x y p -> MpFunc(x, y, p))
+        pipe4 getPosition (str_ws "func") mpIdentifier mpFuncVar  (fun p _ x y -> MpFunc(x, y, p))
 
     let mpReturnValue = pipe2 (str_ws "return") mpExpr (fun _ -> MpReturn)
 
     let mpReturnVoid =
-        pstring "return" .>>. getPosition
-        |>> (fun (_, p) -> MpReturn(MpLiteral MpNull, p))
+        getPosition .>>. pstring "return"
+        |>> (fun (p, _) -> MpReturn(MpLiteral MpNull, p))
 
     let mpReturn = attempt mpReturnValue <|> mpReturnVoid
 
     let mpBreak: Parser<instruction, unit> =
-        pstring "break" .>>. getPosition |>> (fun (_, x) -> MpBreak x)
+        getPosition .>>. pstring "break" |>> (fun (x, _) -> MpBreak x)
 
     let mpInstruct =
         [ mpAssign; mpAssignE; mpExprInstr; mpReturn; mpBreak ]

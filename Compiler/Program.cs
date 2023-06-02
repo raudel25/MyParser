@@ -20,9 +20,16 @@ static class Program
 
         var programSrc = File.ReadAllText(args[0]);
 
-        var program = Parser.mpParse(programSrc);
+        try
+        {
+            var program = Parser.mpParse(programSrc);
 
-        Interpreter.mpRun(program);
+            Interpreter.mpRun(program);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e.Message);
+        }
     }
 
     static void Interactive()

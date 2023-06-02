@@ -8,7 +8,8 @@ open MyParser.LibraryFunc
 
 module Interpreter =
 
-    let error (pos: Position) (s: string) = $"Error in {pos}: {s}"
+    let error (pos: Position) (s: string) =
+        $"Error in Ln: {pos.Line} Col: {pos.Column}\n{s}"
 
     let fromObj (pos: Position) (x: obj) =
         match x with
@@ -323,7 +324,7 @@ module Interpreter =
                 match program[indexStart - 1] with
                 | MpIf (cond, posI) -> execute cond posI
                 | MpElIf (cond, posI) -> execute cond posI
-                | _ -> raise (NotSupportedException("Excepted else"))
+                | _ -> raise (Exception("Incorrect instruction else"))
 
             | MpElIf (condEl, pos) ->
 
@@ -343,7 +344,7 @@ module Interpreter =
                 match program[indexStart - 1] with
                 | MpIf (condIf, posI) -> execute condIf posI
                 | MpElIf (condIf, posI) -> execute condIf posI
-                | _ -> raise (NotSupportedException("Excepted elif"))
+                | _ -> raise (Exception("Incorrect instruction elif"))
 
             | MpFor (identifier, initE, stopE, stepE, pos) ->
                 let toIntAux expr =
@@ -380,7 +381,7 @@ module Interpreter =
                     let _ = loops.Pop()
                     pi <- index
 
-            | MpWhile(condition,posI) ->
+            | MpWhile (condition, posI) ->
                 let mutable index = 0
                 let _, pos = condition
 
@@ -405,8 +406,8 @@ module Interpreter =
                 let _ = evalAux x
                 ()
 
-            | MpFunc (identifier, vars,pos) ->
-                
+            | MpFunc (identifier, vars, pos) ->
+
                 if functions.ContainsKey(identifier) || variables.ContainsKey(identifier) then
                     raise (Exception(error pos "There are two terms with the same name"))
 
@@ -444,7 +445,7 @@ module Interpreter =
 
             | MpBreak pos ->
                 if loops.Count = 0 then
-                    raise (Exception(error pos "Except break"))
+                    raise (Exception(error pos "Incorrect instruction break"))
 
                 let _, index = loops.Peek()
                 let _ = loops.Pop()
@@ -475,14 +476,13 @@ module Interpreter =
         try
             let _ = mpRunAux (ProgramState(variables, func, program)) start program.Length
             program.Length
-        with
-        | :? Exception as ex ->
-            if ex.Message = "Excepted }" then
+        with ex ->
+            let s = ex.Message.Split('\n')
+
+            if s[1] = "Not find end block instruction }" then
                 start
             else
                 raise (Exception(ex.Message))
-        | _ -> raise (Exception())
-
 
     let mpRun (program: instruction[]) =
         let variables = VarLookup()
