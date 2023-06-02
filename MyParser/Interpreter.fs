@@ -2,15 +2,15 @@ namespace MyParser
 
 open System
 open System.Collections.Generic
+open FParsec
 open Microsoft.FSharp.Core
 open MyParser.LibraryFunc
 
 module Interpreter =
-    
-    let error (s:string)=
-        $"Error in execution: {s}"
 
-    let fromObj (x: obj) =
+    let error (pos: Position) (s: string) = $"Error in {pos}: {s}"
+
+    let fromObj (pos: Position) (x: obj) =
         match x with
         | :? bool as x -> MpBool x
         | :? int as x -> MpInt x
@@ -18,26 +18,26 @@ module Interpreter =
         | :? string as x -> MpString x
         | :? char as x -> MpChar x
         | null -> MpNull
-        | x -> raise (Exception(error(x.ToString())))
+        | x -> raise (Exception(error pos (x.ToString())))
 
 
 
-    let toInt =
+    let toInt (pos: Position) =
         let f x =
             match x with
             | MpInt x -> x
             | MpDouble x -> int x
             | MpString x -> int x
             | MpNull -> 0
-            | _ -> raise (Exception(error "Cannot convert to int"))
+            | _ -> raise (Exception(error pos "Cannot convert to int"))
 
         f
 
-    let toBool =
+    let toBool (pos: Position) =
         let f x =
             match x with
             | MpBool x -> x
-            | _ -> raise (Exception(error "Cannot convert to bool"))
+            | _ -> raise (Exception(error pos "Cannot convert to bool"))
 
         f
 
@@ -48,14 +48,14 @@ module Interpreter =
         | MpDouble l, MpInt r -> Some(l, double r)
         | _, _ -> None
 
-    let compare lhs rhs =
+    let compare (pos: Position) lhs rhs =
         match lhs, rhs with
         | MpBool l, MpBool r -> l.CompareTo(r)
         | MpInt l, MpInt r -> l.CompareTo(r)
         | AsDoubles (l, r) -> l.CompareTo(r)
         | MpString l, MpString r -> l.CompareTo(r)
         | MpChar l, MpChar r -> l.CompareTo(r)
-        | _ -> raise (Exception (error $"%A{lhs} %A{rhs}"))
+        | _ -> raise (Exception(error pos $"%A{lhs} %A{rhs}"))
 
     type VarLookup = Dictionary<identifier, value>
     type FunctionsLookup = Dictionary<identifier, identifier list * List<identifier> * int * int>
@@ -65,6 +65,7 @@ module Interpreter =
 
     let rec eval (state: ProgramState) (expr: expr) =
         let (vars: VarLookup, functions: FunctionsLookup, program: instruction[]) = state
+        let expr, pos = expr
 
         match expr with
         | MpLiteral x -> x
@@ -73,7 +74,7 @@ module Interpreter =
                 MpFuncValue identifier
             else
                 if not (vars.ContainsKey(identifier)) then
-                    raise (Exception(error "Variable does not exist"))
+                    raise (Exception(error pos "Variable does not exist"))
 
                 vars[identifier]
         | MpArrayL a ->
@@ -86,21 +87,22 @@ module Interpreter =
             MpArrayValue newA
         | MpArrayD (a, b) ->
             let a = eval state a
+            let _, pos = b
             let b = eval state b
 
             match b with
             | MpInt b -> MpArrayValue(Array.create b a)
-            | _ -> raise (Exception(error "Cannot convert to int"))
+            | _ -> raise (Exception(error pos "Cannot convert to int"))
         | MpIndex (identifier, indices) ->
             if not (vars.ContainsKey(identifier)) then
-                raise (Exception(error "Variable does not exist"))
+                raise (Exception(error pos "Variable does not exist"))
 
             let value = vars[identifier]
 
             getIndices state value indices 0
         | MpSlice (identifier, start, stop) ->
             if not (vars.ContainsKey(identifier)) then
-                raise (Exception(error "Variable does not exist"))
+                raise (Exception(error pos "Variable does not exist"))
 
             let start, stop = (eval state start, eval state stop)
 
@@ -109,28 +111,28 @@ module Interpreter =
             match (value, start, stop) with
             | MpArrayValue v, MpInt start, MpInt stop -> MpArrayValue v[start .. stop - 1]
             | MpString s, MpInt start, MpInt stop -> MpString s[start .. stop - 1]
-            | _ -> raise (Exception(error "Slice is not supported"))
+            | _ -> raise (Exception(error pos "Slice is not supported"))
 
-        | MpNeg x -> arithmetic (eval state x) MpMultiply (MpInt(-1))
-        | MpArithmetic (l, op, r) -> arithmetic (eval state l) op (eval state r)
-        | MpComparison (l, op, r) -> comparison (eval state l) op (eval state r)
-        | MpLogical (l, op, r) -> logical (eval state l) op (eval state r)
+        | MpNeg x -> arithmetic pos (eval state x) MpMultiply (MpInt(-1))
+        | MpArithmetic (l, op, r) -> arithmetic pos (eval state l) op (eval state r)
+        | MpComparison (l, op, r) -> comparison pos (eval state l) op (eval state r)
+        | MpLogical (l, op, r) -> logical pos (eval state l) op (eval state r)
         | MpInvoke (s, expr) ->
             let mutable func = s
 
             if vars.ContainsKey(s) then
                 match vars[s] with
                 | MpFuncValue q -> func <- q
-                | _ -> raise (Exception(error "Variable is not function"))
+                | _ -> raise (Exception(error pos "Variable is not function"))
 
             if not (functions.ContainsKey(func)) then
-                raise (Exception(error "Function does not exist"))
+                raise (Exception(error pos "Function does not exist"))
 
             let variables = VarLookup()
             let identifiers, globals, start, stop = functions[func]
 
             if identifiers.Length <> expr.Length then
-                raise (Exception(error "Function does not have correct parameters"))
+                raise (Exception(error pos "Function does not have correct parameters"))
 
             for i in 0 .. identifiers.Length - 1 do
                 variables[identifiers[i]] <- (eval state expr[i])
@@ -147,8 +149,8 @@ module Interpreter =
         | MpReservedFunc0 s -> funcLib0 s
         | MpReservedFunc1 (s, expr) -> funcLib1 s (eval state expr)
 
-    and comparison lhs op rhs =
-        let x = compare lhs rhs
+    and comparison (pos: Position) lhs op rhs =
+        let x = compare pos lhs rhs
 
         match op with
         | MpEq -> x = 0
@@ -157,9 +159,9 @@ module Interpreter =
         | MpGt -> x > 0
         | MpLe -> x <= 0
         | MpGe -> x >= 0
-        |> fromObj
+        |> fromObj pos
 
-    and arithmetic lhs op rhs =
+    and arithmetic (pos: Position) lhs op rhs =
         match op, (lhs, rhs) with
         | MpAdd, (MpInt l, MpInt r) -> MpInt(l + r)
         | MpAdd, (MpChar l, MpChar r) -> MpChar(l + r)
@@ -174,17 +176,18 @@ module Interpreter =
         | MpDivide, (MpInt l, MpInt r) -> MpInt(l - r)
         | MpDivide, AsDoubles (l, r) -> MpDouble(l - r)
         | MpRest, (MpInt l, MpInt r) -> MpInt(l % r)
-        | _ -> raise (Exception(error "Arithmetic operation is not supported"))
+        | _ -> raise (Exception(error pos "Arithmetic operation is not supported"))
 
-    and logical lhs op rhs =
+    and logical (pos: Position) lhs op rhs =
         match op, lhs, rhs with
         | MpAnd, MpBool l, MpBool r -> MpBool(l && r)
         | MpOr, MpBool l, MpBool r -> MpBool(l || r)
         | MpXor, MpBool l, MpBool r -> MpBool((not l && r) || (not r && l))
-        | _, _, _ -> raise (Exception(error "Logical operation is not supported"))
+        | _, _, _ -> raise (Exception(error pos "Logical operation is not supported"))
 
     and getIndices (state: ProgramState) (value: value) (indices: expr list) ind =
-        let index = toInt (eval state indices[ind])
+        let _, pos = indices[ind]
+        let index = toInt pos (eval state indices[ind])
 
         match value with
         | MpArrayValue v ->
@@ -202,11 +205,12 @@ module Interpreter =
             if ind = 0 && indices.Length = 1 then
                 MpChar v[index]
             else
-                raise (Exception(error "The indexed value is not correct"))
-        | _ -> raise (Exception(error "The indexed value is not correct"))
+                raise (Exception(error pos "The indexed value is not correct"))
+        | _ -> raise (Exception(error pos "The indexed value is not correct"))
 
     and setIndices (state: ProgramState) (value: value) (indices: expr list) ind (e: value) =
-        let index = toInt (eval state indices[ind])
+        let _, pos = indices[ind]
+        let index = toInt pos (eval state indices[ind])
 
         match value with
         | MpArrayValue v ->
@@ -218,7 +222,7 @@ module Interpreter =
             else
                 setIndices state v[index] indices (ind + 1) e
 
-        | _ -> raise (Exception(error "The indexed value is not correct"))
+        | _ -> raise (Exception(error pos "The indexed value is not correct"))
 
     and mpRunAux (state: ProgramState) pi pe =
         let (variables: VarLookup, functions: FunctionsLookup, program: instruction[]) =
@@ -232,12 +236,14 @@ module Interpreter =
         let assign (value: assign) =
             match value with
             | Set (identifier, expr) ->
-                if functions.ContainsKey(identifier) then
-                    raise (Exception(error "There are two terms with the same name"))
+                let identifier, pos = identifier
 
-                variables[identifier] <- evalAux expr
-            | SetE (identifier, expr) ->
                 match identifier with
+                | MpVar identifier ->
+                    if functions.ContainsKey(identifier) then
+                        raise (Exception(error pos "There are two terms with the same name"))
+
+                    variables[identifier] <- evalAux expr
                 | MpIndex (identifier, indices) ->
                     let value = variables[identifier]
 
@@ -255,9 +261,9 @@ module Interpreter =
             | MpEnd -> true
             | _ -> false
 
-        let rec findEndBlock ind cant =
+        let rec findEndBlock (pos: Position) ind cant =
             if ind >= program.Length then
-                raise (Exception(error "Excepted }"))
+                raise (Exception(error pos "Not find end block instruction }"))
 
             let mutable newCant = cant
 
@@ -267,11 +273,14 @@ module Interpreter =
             if endBlock program[ind] then
                 newCant <- cant - 1
 
-            if newCant = 0 then ind else findEndBlock (ind + 1) newCant
+            if newCant = 0 then
+                ind
+            else
+                findEndBlock pos (ind + 1) newCant
 
-        let rec findStartBlock ind cant =
+        let rec findStartBlock (pos: Position) ind cant =
             if ind < 1 then
-                raise (Exception(error "Excepted {"))
+                raise (Exception(error pos "Not find start block instruction {"))
 
             let mutable newCant = cant
 
@@ -284,7 +293,7 @@ module Interpreter =
             if newCant = 0 then
                 ind
             else
-                findStartBlock (ind - 1) newCant
+                findStartBlock pos (ind - 1) newCant
 
 
         let step () =
@@ -292,77 +301,91 @@ module Interpreter =
 
             match instruction with
             | MpAssign set -> assign set
-            | MpIf cond ->
-                let condition = toBool (evalAux cond)
+            | MpIf (cond, posI) ->
+                let _, pos = cond
+                let condition = toBool pos (evalAux cond)
 
                 if not condition then
-                    let index = findEndBlock (pi + 1) 0
+                    let index = findEndBlock posI (pi + 1) 0
                     pi <- index
 
-            | MpElse ->
-                let indexStart = findStartBlock (pi - 1) 0
+            | MpElse pos ->
+                let indexStart = findStartBlock pos (pi - 1) 0
 
-                let execute cond =
-                    let condition = toBool (evalAux cond)
+                let execute cond posI =
+                    let _, pos = cond
+                    let condition = toBool pos (evalAux cond)
 
                     if condition then
-                        let index = findEndBlock (pi + 1) 0
+                        let index = findEndBlock posI (pi + 1) 0
                         pi <- index
 
                 match program[indexStart - 1] with
-                | MpIf cond -> execute cond
-                | MpElIf cond -> execute cond
+                | MpIf (cond, posI) -> execute cond posI
+                | MpElIf (cond, posI) -> execute cond posI
                 | _ -> raise (NotSupportedException("Excepted else"))
 
-            | MpElIf condEl ->
-                let indexStart = findStartBlock (pi - 1) 0
+            | MpElIf (condEl, pos) ->
 
-                let execute condIf =
-                    let conditionIf = toBool (evalAux condIf)
-                    let conditionEl = toBool (evalAux condEl)
+                let indexStart = findStartBlock pos (pi - 1) 0
+
+                let execute condIf posI =
+                    let _, posIf = condIf
+                    let _, posEl = condEl
+
+                    let conditionIf = toBool posIf (evalAux condIf)
+                    let conditionEl = toBool posEl (evalAux condEl)
 
                     if (conditionIf || not conditionEl) then
-                        let indexEnd = findEndBlock (pi + 1) 0
+                        let indexEnd = findEndBlock posI (pi + 1) 0
                         pi <- indexEnd
 
                 match program[indexStart - 1] with
-                | MpIf condIf -> execute condIf
-                | MpElIf condIf -> execute condIf
+                | MpIf (condIf, posI) -> execute condIf posI
+                | MpElIf (condIf, posI) -> execute condIf posI
                 | _ -> raise (NotSupportedException("Excepted elif"))
 
-            | MpFor (identifier, init, stop, step) ->
-                let init, stop, step = (evalAux init, evalAux stop, evalAux step)
+            | MpFor (identifier, initE, stopE, stepE, pos) ->
+                let toIntAux expr =
+                    let value = (evalAux expr)
+                    let _, pos = expr
 
-                match (init, stop, step) with
-                | MpInt init, MpInt stop, MpInt step ->
-                    let mutable index = 0
+                    match value with
+                    | MpInt n -> n
+                    | _ -> raise (Exception(error pos "Cannot convert to int"))
 
-                    let execute () =
-                        assign (Set(identifier, MpLiteral(MpInt init)))
-                        index <- findEndBlock (pi + 1) 0
-                        loops.Push((pi, index))
 
-                    if loops.Count = 0 then
-                        execute ()
-                    else
-                        let piAux, indexAux = loops.Peek()
 
-                        if piAux <> pi then
-                            execute ()
-                        else
-                            variables[identifier] <- arithmetic variables[identifier] MpAdd (MpInt step)
-                            index <- indexAux
+                let _, stop, step = (toIntAux initE, toIntAux stopE, toIntAux stepE)
 
-                    if toInt variables[identifier] >= stop then
-                        let _ = loops.Pop()
-                        pi <- index
-                | _ -> raise (Exception(error "Cannot convert to int"))
-
-            | MpWhile condition ->
                 let mutable index = 0
 
                 let execute () =
-                    index <- findEndBlock (pi + 1) 0
+                    assign (Set((MpVar(identifier), pos), initE))
+                    index <- findEndBlock pos (pi + 1) 0
+                    loops.Push((pi, index))
+
+                if loops.Count = 0 then
+                    execute ()
+                else
+                    let piAux, indexAux = loops.Peek()
+
+                    if piAux <> pi then
+                        execute ()
+                    else
+                        variables[identifier] <- arithmetic pos variables[identifier] MpAdd (MpInt step)
+                        index <- indexAux
+
+                if toInt pos variables[identifier] >= stop then
+                    let _ = loops.Pop()
+                    pi <- index
+
+            | MpWhile(condition,posI) ->
+                let mutable index = 0
+                let _, pos = condition
+
+                let execute () =
+                    index <- findEndBlock posI (pi + 1) 0
                     loops.Push((pi, index))
 
                 if loops.Count = 0 then
@@ -372,7 +395,7 @@ module Interpreter =
 
                     if piAux <> pi then execute () else index <- indexAux
 
-                if evalAux condition |> toBool |> not then
+                if evalAux condition |> toBool pos |> not then
                     let _ = loops.Pop()
                     pi <- index
 
@@ -382,17 +405,19 @@ module Interpreter =
                 let _ = evalAux x
                 ()
 
-            | MpFunc (identifier, vars) ->
+            | MpFunc (identifier, vars,pos) ->
+                
                 if functions.ContainsKey(identifier) || variables.ContainsKey(identifier) then
-                    raise (Exception(error "There are two terms with the same name"))
+                    raise (Exception(error pos "There are two terms with the same name"))
 
-                let index = findEndBlock (pi + 1) 0
+                let index = findEndBlock pos (pi + 1) 0
                 let globals = List<identifier>()
 
                 let contains var =
                     let mutable q = false
 
                     for i in vars do
+                        let i, _ = i
                         q <- q || i = var
 
                     q
@@ -401,11 +426,15 @@ module Interpreter =
                     if not (contains i.Key) then
                         globals.Add(i.Key)
 
-                functions[identifier] <- (vars, globals, pi + 1, index + 1)
+                let newVars = List.map fst vars
+
+                functions[identifier] <- (newVars, globals, pi + 1, index + 1)
 
                 for i in vars do
+                    let i, p = i
+
                     if functions.ContainsKey(i) then
-                        raise (Exception(error "There are two terms with the same name"))
+                        raise (Exception(error p "There are two terms with the same name"))
 
                 pi <- index
 
@@ -413,9 +442,9 @@ module Interpreter =
                 valueReturn <- evalAux expr
                 pi <- pe
 
-            | MpBreak ->
+            | MpBreak pos ->
                 if loops.Count = 0 then
-                    raise (Exception(error "Except break"))
+                    raise (Exception(error pos "Except break"))
 
                 let _, index = loops.Peek()
                 let _ = loops.Pop()
