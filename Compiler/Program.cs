@@ -58,7 +58,9 @@ static class Program
                 Console.WriteLine(e.Message);
 
                 program = Array.Empty<instruction>();
-                (stateVar, stateFunc) = Interpreter.mpState;
+                stateVar.Clear();
+                stateFunc.Clear();
+                
                 start = 0;
             }
         }

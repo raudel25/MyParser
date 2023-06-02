@@ -149,6 +149,10 @@ module Interpreter =
             aux
         | MpReservedFunc0 s -> funcLib0 s
         | MpReservedFunc1 (s, expr) -> funcLib1 s (eval state expr)
+        | MpTernary (cond, e1, e2) ->
+            let cond = eval state cond
+
+            if (toBool pos cond) then eval state e1 else eval state e2
 
     and comparison (pos: Position) lhs op rhs =
         let x = compare pos lhs rhs
@@ -177,6 +181,9 @@ module Interpreter =
         | MpDivide, (MpInt l, MpInt r) -> MpInt(l - r)
         | MpDivide, AsDoubles (l, r) -> MpDouble(l - r)
         | MpRest, (MpInt l, MpInt r) -> MpInt(l % r)
+        | MpArithmeticAnd, (MpInt l, MpInt r) -> MpInt(l &&& r)
+        | MpArithmeticOr, (MpInt l, MpInt r) -> MpInt(l ||| r)
+        | MpArithmeticXor, (MpInt l, MpInt r) -> MpInt(l ^^^ r)
         | _ -> raise (Exception(error pos "Arithmetic operation is not supported"))
 
     and logical (pos: Position) lhs op rhs =
@@ -354,8 +361,6 @@ module Interpreter =
                     match value with
                     | MpInt n -> n
                     | _ -> raise (Exception(error pos "Cannot convert to int"))
-
-
 
                 let _, stop, step = (toIntAux initE, toIntAux stopE, toIntAux stepE)
 

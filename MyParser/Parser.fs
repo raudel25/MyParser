@@ -13,6 +13,9 @@ type arithmetic =
     | MpMultiply
     | MpDivide
     | MpRest
+    | MpArithmeticAnd
+    | MpArithmeticOr
+    | MpArithmeticXor
 
 type comparison =
     | MpEq
@@ -51,6 +54,7 @@ type exprT =
     | MpInvoke of identifier * expr list
     | MpReservedFunc0 of identifier
     | MpReservedFunc1 of identifier * expr
+    | MpTernary of expr * expr * expr
 
 and expr = exprT * Position
 
@@ -200,6 +204,8 @@ module Parser =
 
     let mpSlice, mpSliceR = createParserForwardedToRef ()
 
+    let mpTernary, mpTernaryR = createParserForwardedToRef ()
+
     let mpValue =
         choice
             [ attempt mpSlice
@@ -228,6 +234,18 @@ module Parser =
     oppA.AddOperator(InfixOperator("/", ws, 2, Assoc.Left, (fun (x, p) y -> MpArithmetic((x, p), MpDivide, y), p)))
     oppA.AddOperator(PrefixOperator("-", ws, 2, true, (fun (x, p) -> MpNeg(x, p), p)))
     oppA.AddOperator(InfixOperator("%", ws, 2, Assoc.Left, (fun (x, p) y -> MpArithmetic((x, p), MpRest, y), p)))
+
+    oppA.AddOperator(
+        InfixOperator("&", ws, 3, Assoc.Left, (fun (x, p) y -> MpArithmetic((x, p), MpArithmeticAnd, y), p))
+    )
+
+    oppA.AddOperator(
+        InfixOperator("|", ws, 3, Assoc.Left, (fun (x, p) y -> MpArithmetic((x, p), MpArithmeticOr, y), p))
+    )
+
+    oppA.AddOperator(
+        InfixOperator("^", ws, 3, Assoc.Left, (fun (x, p) y -> MpArithmetic((x, p), MpArithmeticXor, y), p))
+    )
 
     let oppC = OperatorPrecedenceParser<expr, unit, unit>()
     let mpComparison = oppC.ExpressionParser
@@ -263,7 +281,11 @@ module Parser =
         pipe4 mpIdentifier (str_ws "[") mpSliceInd (pstring "]") (fun s _ (x, y) _ -> MpSlice(s, x, y))
         |> mpPosition
 
-    let mpExpr = mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray
+    let mpExpr =
+        attempt mpTernary <|> mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray
+
+    mpTernaryR.Value <-
+        pipe5 mpLogical (str_ws "?") mpExpr (str_ws ":") mpExpr (fun (l, p) _ e1 _ e2 -> MpTernary((l, p), e1, e2), p)
 
     let mpArrayL =
         (between (pchar '[') (pchar ']') (sepBy (ws >>. mpExpr .>> ws) (pchar ',')))
@@ -299,11 +321,72 @@ module Parser =
 
     mpReservedFuncR.Value <- mpReservedFunc0 <|> mpReservedFunc1
 
-    let mpAssign =
+    let mpAssignAdd =
+        pipe3 mpVar (ws >>. (str_ws "+") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+            MpAssign(Set((id, p), (MpArithmetic((id, p), MpAdd, e), p))))
+
+    let mpAssignSubtract =
+        pipe3 mpVar (ws >>. (str_ws "-") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+            MpAssign(Set((id, p), (MpArithmetic((id, p), MpSubtract, e), p))))
+
+    let mpAssignMultiply =
+        pipe3 mpVar (ws >>. (str_ws "*") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+            MpAssign(Set((id, p), (MpArithmetic((id, p), MpMultiply, e), p))))
+
+    let mpAssignDivide =
+        pipe3 mpVar (ws >>. (str_ws "/") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+            MpAssign(Set((id, p), (MpArithmetic((id, p), MpDivide, e), p))))
+
+    let mpAssignRest =
+        pipe3 mpVar (ws >>. (str_ws "%") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+            MpAssign(Set((id, p), (MpArithmetic((id, p), MpRest, e), p))))
+
+    let mpAssignArithmeticAnd =
+        pipe3 mpVar (ws >>. (str_ws "&") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+            MpAssign(Set((id, p), (MpArithmetic((id, p), MpArithmeticAnd, e), p))))
+
+    let mpAssignArithmeticOr =
+        pipe3 mpVar (ws >>. (str_ws "|") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+            MpAssign(Set((id, p), (MpArithmetic((id, p), MpArithmeticOr, e), p))))
+
+    let mpAssignArithmeticXor =
+        pipe3 mpVar (ws >>. (str_ws "^") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+            MpAssign(Set((id, p), (MpArithmetic((id, p), MpArithmeticXor, e), p))))
+
+    let mpAssignAnd =
+        pipe3 mpVar (ws >>. (str_ws "&&") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+            MpAssign(Set((id, p), (MpLogical((id, p), MpAnd, e), p))))
+
+    let mpAssignOr =
+        pipe3 mpVar (ws >>. (str_ws "||") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+            MpAssign(Set((id, p), (MpLogical((id, p), MpOr, e), p))))
+
+    let mpAssignXor =
+        pipe3 mpVar (ws >>. (str_ws "^^") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+            MpAssign(Set((id, p), (MpLogical((id, p), MpXor, e), p))))
+
+    let mpAssignV =
         pipe3 mpVar (ws >>. (str_ws "=")) mpExpr (fun id _ e -> MpAssign(Set(id, e)))
 
     let mpAssignE =
         pipe3 mpIndex (ws >>. (str_ws "=")) mpExpr (fun id _ e -> MpAssign(Set(id, e)))
+
+    let mpAssign =
+        [ mpAssignAnd
+          mpAssignOr
+          mpAssignXor
+          mpAssignArithmeticAnd
+          mpAssignArithmeticOr
+          mpAssignArithmeticXor
+          mpAssignAdd
+          mpAssignSubtract
+          mpAssignMultiply
+          mpAssignDivide
+          mpAssignRest
+          mpAssignE
+          mpAssignV ]
+        |> List.map attempt
+        |> choice
 
     let mpExprInstr = mpExpr |>> MpExpr
 
@@ -323,26 +406,29 @@ module Parser =
         pipe5 getPosition (str_ws "while") (str_ws "(") mpLogical (str_ws ")") (fun p _ _ e _ -> MpWhile(e, p))
 
     let mpFor: Parser<instruction, unit> =
-        pipe5 getPosition (str_ws "for") mpIdentifier_ws (str_ws "in") mpRange  (fun p _ s _ (x, y, z) ->
+        pipe5 getPosition (str_ws "for") mpIdentifier_ws (str_ws "in") mpRange (fun p _ s _ (x, y, z) ->
             MpFor(s, x, y, z, p))
 
     let mpIf =
         pipe5 getPosition (str_ws "if") (str_ws "(") mpLogical (str_ws ")") (fun p _ _ e _ -> MpIf(e, p))
 
     let mpElIf =
-        pipe5 getPosition (str_ws "elif") (str_ws "(") mpLogical (str_ws ")")  (fun p _ _ e _ -> MpElIf(e, p))
+        pipe5 getPosition (str_ws "elif") (str_ws "(") mpLogical (str_ws ")") (fun p _ _ e _ -> MpElIf(e, p))
 
-    let mpElse = (getPosition.>>.pstring "else" ) |>> (fun (p, _) -> MpElse p)
+    let mpElse = (getPosition .>>. pstring "else") |>> (fun (p, _) -> MpElse p)
 
     let mpStart: Parser<instruction, unit> = pstring "{" |>> (fun _ -> MpStart)
 
     let mpEnd: Parser<instruction, unit> = pstring "}" |>> (fun _ -> MpEnd)
 
     let mpFuncVar =
-        between (str_ws "(") (pstring ")") (sepBy ((ws >>. getPosition.>>.mpIdentifier  .>> ws)|>>(fun (x,y)->(y,x))) (pchar ','))
+        between
+            (str_ws "(")
+            (pstring ")")
+            (sepBy ((ws >>. getPosition .>>. mpIdentifier .>> ws) |>> (fun (x, y) -> (y, x))) (pchar ','))
 
     let mpFunc =
-        pipe4 getPosition (str_ws "func") mpIdentifier mpFuncVar  (fun p _ x y -> MpFunc(x, y, p))
+        pipe4 getPosition (str_ws "func") mpIdentifier mpFuncVar (fun p _ x y -> MpFunc(x, y, p))
 
     let mpReturnValue = pipe2 (str_ws "return") mpExpr (fun _ -> MpReturn)
 
@@ -356,9 +442,7 @@ module Parser =
         getPosition .>>. pstring "break" |>> (fun (x, _) -> MpBreak x)
 
     let mpInstruct =
-        [ mpAssign; mpAssignE; mpExprInstr; mpReturn; mpBreak ]
-        |> List.map attempt
-        |> choice
+        [ mpAssign; mpExprInstr; mpReturn; mpBreak ] |> List.map attempt |> choice
 
     let mpBlockInstruct =
         [ mpWhile; mpFor; mpStart; mpEnd; mpIf; mpElIf; mpElse; mpFunc ]
