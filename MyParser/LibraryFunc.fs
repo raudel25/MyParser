@@ -2,8 +2,12 @@ namespace MyParser
 
 open System
 open Microsoft.FSharp.Core
+open FParsec
 
 module internal LibraryFunc =
+    let error (pos: Position) (s: string) =
+        $"Error in Ln: {pos.Line} Col: {pos.Column}\n{s}"
+
     let rec toStr value =
         let aux (x: value[]) =
             let mutable s = ""
@@ -39,9 +43,9 @@ module internal LibraryFunc =
             let mutable s = x + " { "
 
             for i in y do
-                s <- s + ($"{i.Key} = {toStr (i.Value)} , ")
+                s <- s + $"{i.Key} = {toStr i.Value} , "
 
-            s <- s[..s.Length-3] + "}"
+            s <- s[.. s.Length - 3] + "}"
             s
 
     let printL (value: value) : value =
@@ -68,38 +72,46 @@ module internal LibraryFunc =
 
         MpString s
 
-    let toInt value =
-        match value with
-        | MpInt x -> MpInt x
-        | MpDouble x -> MpInt(int x)
-        | MpBool true -> MpInt 1
-        | MpBool false -> MpInt 0
-        | MpString x -> MpInt(int x)
-        | MpChar x -> MpInt(int x)
-        | MpNull -> MpInt 0
-        | _ -> raise (NotSupportedException("Cannot convert from array to int"))
+    let toInt pos value =
+        try
+            match value with
+            | MpInt x -> MpInt x
+            | MpDouble x -> MpInt(int x)
+            | MpBool true -> MpInt 1
+            | MpBool false -> MpInt 0
+            | MpString x -> MpInt(int x)
+            | MpChar x -> MpInt(int x)
+            | MpNull -> MpInt 0
+            | _ -> raise (Exception())
 
-    let toDouble value =
-        match value with
-        | MpInt x -> MpDouble(double x)
-        | MpDouble x -> MpDouble x
-        | MpBool true -> MpDouble 1
-        | MpBool false -> MpDouble 0
-        | MpString x -> MpDouble(double x)
-        | MpChar x -> MpDouble(double x)
-        | MpNull -> MpDouble 0
-        | _ -> raise (NotSupportedException("Cannot convert to double"))
+        with _ ->
+            raise (Exception(error pos "Cannot convert from array to int"))
+
+    let toDouble pos value =
+        try
+            match value with
+            | MpInt x -> MpDouble(double x)
+            | MpDouble x -> MpDouble x
+            | MpBool true -> MpDouble 1
+            | MpBool false -> MpDouble 0
+            | MpString x -> MpDouble(double x)
+            | MpChar x -> MpDouble(double x)
+            | MpNull -> MpDouble 0
+            | _ -> raise (Exception())
+        with _ ->
+            raise (Exception(error pos "Cannot convert to double"))
+
 
     let funcLib0 s =
         match s with
         | "input" -> input
         | _ -> MpNull
 
-    let funcLib1 s value =
+    let funcLib1 pos s value =
         match s with
         | "printL" -> printL value
         | "printLn" -> printLn value
-        | "int" -> toInt value
-        | "double" -> toDouble value
+        | "int" -> toInt pos value
+        | "double" -> toDouble pos value
         | "str" -> MpString(toStr value)
         | _ -> MpNull

@@ -8,9 +8,6 @@ open MyParser.LibraryFunc
 
 module Interpreter =
 
-    let error (pos: Position) (s: string) =
-        $"Error in Ln: {pos.Line} Col: {pos.Column}\n{s}"
-
     let fromObj (pos: Position) (x: obj) =
         match x with
         | :? bool as x -> MpBool x
@@ -138,7 +135,9 @@ module Interpreter =
                 aux
             | _ -> raise (Exception(error pos "Expression is not function"))
         | MpReservedFunc0 s -> funcLib0 s
-        | MpReservedFunc1 (s, expr) -> funcLib1 s (eval state expr)
+        | MpReservedFunc1 (s, expr) ->
+            let _,pos=expr
+            funcLib1 pos s (eval state expr)
         | MpTernary (cond, e1, e2) ->
             let cond = eval state cond
 
@@ -207,9 +206,9 @@ module Interpreter =
             else
                 getIndices state v indices (ind + 1)
 
-        let getArray (v: value[]) index =
+        let getArray pos (v: value[]) index =
             if index < 0 || index >= v.Length then
-                raise (IndexOutOfRangeException())
+                raise (Exception(error pos "Index out range"))
 
             getValue v[index]
 
@@ -219,10 +218,10 @@ module Interpreter =
             let index = toInt pos (eval state index)
 
             match value with
-            | MpArrayValue v -> getArray v index
+            | MpArrayValue v -> getArray pos v index
             | MpString v ->
                 if index < 0 || index >= v.Length then
-                    raise (IndexOutOfRangeException())
+                    raise (Exception(error pos "Index out range"))
 
                 if ind = 0 && indices.Length = 1 then
                     MpChar v[index]
@@ -231,7 +230,7 @@ module Interpreter =
             | _ -> raise (Exception(error pos "The indexed value is not correct"))
         | MpIndexT (index, pos) ->
             match value with
-            | MpTupleValue v -> getArray v index
+            | MpTupleValue v -> getArray pos v index
             | _ -> raise (Exception(error pos "The property is not correct"))
         | MpProperty (prop, pos) ->
             match value with
@@ -244,9 +243,9 @@ module Interpreter =
 
 
     and setIndices (state: ProgramState) (value: value) (indices: property list) ind (e: value) =
-        let setArray (v: value[]) index =
+        let setArray pos (v: value[]) index =
             if index < 0 || index >= v.Length then
-                raise (IndexOutOfRangeException())
+                raise (Exception(error pos  "Index out range"))
 
             if ind = indices.Length - 1 then
                 v[index] <- e
@@ -259,7 +258,7 @@ module Interpreter =
             let index = toInt pos (eval state index)
 
             match value with
-            | MpArrayValue v -> setArray v index
+            | MpArrayValue v -> setArray pos v index
             | _ -> raise (Exception(error pos "The indexed set is not correct"))
         | MpIndexT (_, pos) -> raise (Exception(error pos "The indexed set is not correct"))
         | MpProperty (prop, pos) ->
@@ -541,7 +540,7 @@ module Interpreter =
         with ex ->
             let s = ex.Message.Split('\n')
 
-            if s[1] = "Not find end block instruction }" then
+            if s.Length>1&&s[1] = "Not find end block instruction }" then
                 start
             else
                 raise (Exception(ex.Message))
