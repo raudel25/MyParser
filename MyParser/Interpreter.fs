@@ -113,34 +113,32 @@ module Interpreter =
         | MpComparison (l, op, r) -> comparison pos (eval state l) op (eval state r)
         | MpLogical (l, op, r) -> logical pos (eval state l) op (eval state r)
         | MpInvoke (s, expr) ->
-            let mutable func = s
+            let s = eval state s
 
-            if vars.ContainsKey(s) then
-                match vars[s] with
-                | MpFuncValue q -> func <- q
-                | _ -> raise (Exception(error pos "Variable is not function"))
+            match s with
+            | MpFuncValue func ->
+                if not (functions.ContainsKey(func)) then
+                    raise (Exception(error pos "Function does not exist"))
 
-            if not (functions.ContainsKey(func)) then
-                raise (Exception(error pos "Function does not exist"))
+                let variables = VarLookup()
+                let identifiers, globals, start, stop = functions[func]
 
-            let variables = VarLookup()
-            let identifiers, globals, start, stop = functions[func]
+                if identifiers.Length <> expr.Length then
+                    raise (Exception(error pos "Function does not have correct parameters"))
 
-            if identifiers.Length <> expr.Length then
-                raise (Exception(error pos "Function does not have correct parameters"))
+                for i in 0 .. identifiers.Length - 1 do
+                    variables[identifiers[i]] <- (eval state expr[i])
 
-            for i in 0 .. identifiers.Length - 1 do
-                variables[identifiers[i]] <- (eval state expr[i])
+                for var in globals do
+                    variables[var] <- vars[var]
 
-            for var in globals do
-                variables[var] <- vars[var]
+                let aux = mpRunAux (ProgramState(variables, functions, program)) start stop
 
-            let aux = mpRunAux (ProgramState(variables, functions, program)) start stop
+                for var in globals do
+                    vars[var] <- variables[var]
 
-            for var in globals do
-                vars[var] <- variables[var]
-
-            aux
+                aux
+            | _ -> raise (Exception(error pos "Expression is not function"))
         | MpReservedFunc0 s -> funcLib0 s
         | MpReservedFunc1 (s, expr) -> funcLib1 s (eval state expr)
         | MpTernary (cond, e1, e2) ->

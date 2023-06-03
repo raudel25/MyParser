@@ -53,7 +53,7 @@ type exprT =
     | MpArithmetic of expr * arithmetic * expr
     | MpComparison of expr * comparison * expr
     | MpLogical of expr * logical * expr
-    | MpInvoke of identifier * expr list
+    | MpInvoke of expr * expr list
     | MpReservedFunc0 of identifier
     | MpReservedFunc1 of identifier * expr
     | MpTernary of expr * expr * expr
@@ -216,17 +216,18 @@ module Parser =
     let mpTernary, mpTernaryR = createParserForwardedToRef ()
 
     let mpValue =
-        choice
-            [ attempt mpSlice
-              attempt mpIdentProp
-              attempt mpInvoke
-              attempt mpReservedFunc
-              mpNum
-              mpString
-              mpNull
-              mpVar
-              mpBool
-              mpChar ]
+        [ mpInvoke
+          mpReservedFunc
+          mpSlice
+          mpIdentProp
+          mpNum
+          mpString
+          mpNull
+          mpVar
+          mpBool
+          mpChar ]
+        |> List.map attempt
+        |> choice
 
     type Assoc = Associativity
 
@@ -311,13 +312,13 @@ module Parser =
         pipe5 mpLogical (str_ws "?") mpExpr (str_ws ":") mpExpr (fun (l, p) _ e1 _ e2 -> MpTernary((l, p), e1, e2), p)
 
     mpTupleR.Value <-
-        (between (pchar '(') (pchar ')') (sepBy (ws >>. mpExpr .>> ws) (pchar ',')))
+        (between (pchar '(') (pchar ')') (sepBy (wsl >>. mpExpr .>> wsl) (pchar ',')))
         |>> List.toArray
         |>> MpTuple
         |> mpPosition
 
     let mpArrayL =
-        (between (pchar '[') (pchar ']') (sepBy (ws >>. mpExpr .>> ws) (pchar ',')))
+        (between (pchar '[') (pchar ']') (sepBy (wsl >>. mpExpr .>> wsl) (pchar ',')))
         |>> List.toArray
         |>> MpArrayL
         |> mpPosition
@@ -331,7 +332,9 @@ module Parser =
     let mpInvokeVar =
         between (str_ws "(") (pstring ")") (sepBy (ws >>. mpExpr .>> ws) (pchar ','))
 
-    mpInvokeR.Value <- pipe2 mpIdentifier mpInvokeVar (fun x y -> MpInvoke(x, y)) |> mpPosition
+    mpInvokeR.Value <-
+        pipe2 (attempt mpIdentProp <|> mpVar) mpInvokeVar (fun x y -> MpInvoke(x, y))
+        |> mpPosition
 
     let mpReservedFuncIdentifier1: Parser<string, unit> =
         choice (reservedFunctions1 |> List.map pstring)
