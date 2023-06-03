@@ -5,16 +5,17 @@ open Microsoft.FSharp.Core
 
 module internal LibraryFunc =
     let rec toStr value =
-        let aux (x:value[])=
-            let mutable s=""
+        let aux (x: value[]) =
+            let mutable s = ""
+
             for i in 0 .. x.Length - 2 do
                 s <- s + toStr x[i]
                 s <- s + " , "
 
             s <- s + toStr x[x.Length - 1]
-            
+
             s
-            
+
         match value with
         | MpInt x -> string x
         | MpDouble x -> string x
@@ -26,13 +27,21 @@ module internal LibraryFunc =
         | MpFuncValue s -> s
         | MpArrayValue x ->
             let mutable s = "[ "
-            s<-s+(aux x)
+            s <- s + (aux x)
             s <- s + " ]"
             s
         | MpTupleValue x ->
             let mutable s = "( "
-            s<-s+(aux x)
+            s <- s + (aux x)
             s <- s + " )"
+            s
+        | MpStructValue (x, y) ->
+            let mutable s = x + " { "
+
+            for i in y do
+                s <- s + ($"{i.Key} = {toStr (i.Value)} , ")
+
+            s <- s[..s.Length-3] + "}"
             s
 
     let printL (value: value) : value =
@@ -43,9 +52,8 @@ module internal LibraryFunc =
         | MpString x -> printf $"%s{x}"
         | MpChar x -> printf $"%c{x}"
         | MpNull -> printf "null"
-        | MpArrayValue _ -> printf $"%s{(toStr value)}"
         | MpFuncValue s -> printf $"%s{s}"
-        | MpTupleValue _ -> printf $"%s{toStr value}"
+        | _ -> printf $"%s{toStr value}"
 
         MpNull
 

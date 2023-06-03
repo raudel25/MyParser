@@ -35,7 +35,7 @@ static class Program
     static void Interactive()
     {
         var program = Array.Empty<instruction>();
-        var (stateVar, stateFunc) = Interpreter.mpState;
+        var (stateVar, stateFunc, stateStruct) = Interpreter.mpState;
         var start = 0;
 
         while (true)
@@ -51,7 +51,7 @@ static class Program
 
                 program = program.Concat(newProgram).ToArray();
 
-                start = Interpreter.mpInteractive(stateVar, stateFunc, program, start);
+                start = Interpreter.mpInteractive(stateVar, stateFunc, stateStruct, program, start);
             }
             catch (Exception e)
             {
@@ -60,7 +60,7 @@ static class Program
                 program = Array.Empty<instruction>();
                 stateVar.Clear();
                 stateFunc.Clear();
-                
+
                 start = 0;
             }
         }

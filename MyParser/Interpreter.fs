@@ -60,12 +60,14 @@ module Interpreter =
 
     type VarLookup = Dictionary<identifier, value>
     type FunctionsLookup = Dictionary<identifier, identifier list * List<identifier> * int * int>
-
-    type State = VarLookup * FunctionsLookup
-    type ProgramState = VarLookup * FunctionsLookup * instruction[]
+    type StructLookup = Dictionary<identifier, identifier list>
+    type State = VarLookup * FunctionsLookup * StructLookup
+    type ProgramState = VarLookup * FunctionsLookup * StructLookup * instruction[]
 
     let rec eval (state: ProgramState) (expr: expr) =
-        let (vars: VarLookup, functions: FunctionsLookup, program: instruction[]) = state
+        let (vars: VarLookup, functions: FunctionsLookup, structs: StructLookup, program: instruction[]) =
+            state
+
         let expr, pos = expr
 
         match expr with
@@ -132,7 +134,7 @@ module Interpreter =
                 for var in globals do
                     variables[var] <- vars[var]
 
-                let aux = mpRunAux (ProgramState(variables, functions, program)) start stop
+                let aux = mpRunAux (ProgramState(variables, functions, structs, program)) start stop
 
                 for var in globals do
                     vars[var] <- variables[var]
@@ -145,6 +147,23 @@ module Interpreter =
             let cond = eval state cond
 
             if (toBool pos cond) then eval state e1 else eval state e2
+
+        | MpStructConst (s, props) ->
+            if not (structs.ContainsKey(s)) then
+                raise (Exception(error pos "Struct does not exist"))
+
+            let listProps = structs[s]
+
+            if listProps.Length <> props.Length then
+                raise (Exception(error pos "Struct does not have correct parameters"))
+
+            let q = Dictionary<identifier, value>()
+
+            for i in 0 .. listProps.Length - 1 do
+                q[listProps[i]] <- (eval state props[i])
+
+            MpStructValue(s, q)
+
 
     and comparison (pos: Position) lhs op rhs =
         let x = compare pos lhs rhs
@@ -186,14 +205,17 @@ module Interpreter =
         | _, _, _ -> raise (Exception(error pos "Logical operation is not supported"))
 
     and getIndices (state: ProgramState) (value: value) (indices: property list) ind =
+        let getValue v =
+            if ind = indices.Length - 1 then
+                v
+            else
+                getIndices state v indices (ind + 1)
+
         let getArray (v: value[]) index =
             if index < 0 || index >= v.Length then
                 raise (IndexOutOfRangeException())
 
-            if ind = indices.Length - 1 then
-                v[index]
-            else
-                getIndices state v[index] indices (ind + 1)
+            getValue v[index]
 
         match indices[ind] with
         | MpIndexA index ->
@@ -215,6 +237,15 @@ module Interpreter =
             match value with
             | MpTupleValue v -> getArray v index
             | _ -> raise (Exception(error pos "The property is not correct"))
+        | MpProperty (prop, pos) ->
+            match value with
+            | MpStructValue (_, v) ->
+                if not (v.ContainsKey(prop)) then
+                    raise (Exception(error pos "The property is not correct"))
+
+                getValue v[prop]
+            | _ -> raise (Exception(error pos "The property is not correct"))
+
 
     and setIndices (state: ProgramState) (value: value) (indices: property list) ind (e: value) =
         let setArray (v: value[]) index =
@@ -235,9 +266,21 @@ module Interpreter =
             | MpArrayValue v -> setArray v index
             | _ -> raise (Exception(error pos "The indexed set is not correct"))
         | MpIndexT (_, pos) -> raise (Exception(error pos "The indexed set is not correct"))
+        | MpProperty (prop, pos) ->
+            match value with
+            | MpStructValue (_, v) ->
+                if not (v.ContainsKey(prop)) then
+                    raise (Exception(error pos "The property is not correct"))
+
+                if ind = indices.Length - 1 then
+                    v[prop] <- e
+                else
+                    setIndices state v[prop] indices (ind + 1) e
+            | _ -> raise (Exception(error pos "The property is not correct"))
+
 
     and mpRunAux (state: ProgramState) pi pe =
-        let (variables: VarLookup, functions: FunctionsLookup, program: instruction[]) =
+        let (variables: VarLookup, functions: FunctionsLookup, structs: StructLookup, program: instruction[]) =
             state
 
         let mutable pi = pi
@@ -252,7 +295,7 @@ module Interpreter =
 
                 match identifier with
                 | MpVar identifier ->
-                    if functions.ContainsKey(identifier) then
+                    if functions.ContainsKey(identifier) || structs.ContainsKey(identifier) then
                         raise (Exception(error pos "There are two terms with the same name"))
 
                     variables[identifier] <- evalAux expr
@@ -306,6 +349,14 @@ module Interpreter =
                 ind
             else
                 findStartBlock pos (ind - 1) newCant
+
+        let sameName pos identifier =
+            if
+                functions.ContainsKey(identifier)
+                || variables.ContainsKey(identifier)
+                || structs.ContainsKey(identifier)
+            then
+                raise (Exception(error pos "There are two terms with the same name"))
 
 
         let step () =
@@ -416,9 +467,7 @@ module Interpreter =
                 ()
 
             | MpFunc (identifier, vars, pos) ->
-
-                if functions.ContainsKey(identifier) || variables.ContainsKey(identifier) then
-                    raise (Exception(error pos "There are two terms with the same name"))
+                let _ = sameName pos identifier
 
                 let index = findEndBlock pos (pi + 1) 0
                 let globals = List<identifier>()
@@ -443,7 +492,7 @@ module Interpreter =
                 for i in vars do
                     let i, p = i
 
-                    if functions.ContainsKey(i) then
+                    if functions.ContainsKey(i) || structs.ContainsKey(i) then
                         raise (Exception(error p "There are two terms with the same name"))
 
                 pi <- index
@@ -460,6 +509,11 @@ module Interpreter =
                 let _ = loops.Pop()
                 pi <- index
 
+            | MpStruct (identifier, vars, pos) ->
+                let _ = sameName pos identifier
+
+                structs[identifier] <- vars
+
         while pi < pe do
             step ()
 
@@ -475,15 +529,18 @@ module Interpreter =
 
     let mpState =
         let variables = VarLookup()
-        let func = FunctionsLookup()
+        let functions = FunctionsLookup()
+        let structs = StructLookup()
 
-        State(variables, func)
+        State(variables, functions, structs)
 
     let mpInteractive (state: State) (program: instruction[]) start =
-        let variables, func = state
+        let variables, functions, structs = state
 
         try
-            let _ = mpRunAux (ProgramState(variables, func, program)) start program.Length
+            let _ =
+                mpRunAux (ProgramState(variables, functions, structs, program)) start program.Length
+
             program.Length
         with ex ->
             let s = ex.Message.Split('\n')
@@ -495,6 +552,7 @@ module Interpreter =
 
     let mpRun (program: instruction[]) =
         let variables = VarLookup()
-        let func = FunctionsLookup()
+        let functions = FunctionsLookup()
+        let structs = StructLookup()
 
-        mpRunAux (ProgramState(variables, func, program)) 0 program.Length
+        mpRunAux (ProgramState(variables, functions, structs, program)) 0 program.Length

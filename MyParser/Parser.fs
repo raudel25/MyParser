@@ -40,6 +40,7 @@ type value =
     | MpTupleValue of value[]
     | MpArrayValue of value[]
     | MpFuncValue of identifier
+    | MpStructValue of identifier * Hashtable<identifier,value>
 
 type exprT =
     | MpIdentProp of identifier * property list
@@ -57,6 +58,7 @@ type exprT =
     | MpReservedFunc0 of identifier
     | MpReservedFunc1 of identifier * expr
     | MpTernary of expr * expr * expr
+    | MpStructConst of identifier * expr list
 
 and expr = exprT * Position
 
@@ -68,6 +70,7 @@ and property =
 type assign = Set of expr * expr
 
 type instruction =
+    | MpStruct of identifier *identifier list*Position
     | MpFunc of identifier * (identifier * Position) list * Position
     | MpAssign of assign
     | MpExpr of expr
@@ -204,6 +207,8 @@ module Parser =
     let mpArray, mpArrayR = createParserForwardedToRef ()
 
     let mpTuple, mpTupleR = createParserForwardedToRef ()
+    
+    let mpStructConst,mpStructConstR=createParserForwardedToRef ()
 
     let mpIdentProp, mpIdentPropR = createParserForwardedToRef ()
 
@@ -293,7 +298,7 @@ module Parser =
         |>> MpProperty
 
     mpIdentPropR.Value <-
-        pipe2 mpIdentifier (many1 (mpIndexA <|> mpIndexT <|> mpProperty)) (fun x y -> MpIdentProp(x, y))
+        pipe2 mpIdentifier (many1 (mpIndexA <|> attempt mpIndexT <|> attempt mpProperty)) (fun x y -> MpIdentProp(x, y))
         |> mpPosition
 
     let mpSliceInd =
@@ -304,7 +309,7 @@ module Parser =
         |> mpPosition
 
     let mpExpr =
-        [ mpTernary; mpLogical; mpComparison; mpArithmetic; mpArray; mpTuple ]
+        [ mpStructConst; mpTernary; mpLogical; mpComparison; mpArithmetic; mpArray; mpTuple ]
         |> List.map attempt
         |> choice
 
@@ -328,6 +333,15 @@ module Parser =
         |> mpPosition
 
     mpArrayR.Value <- attempt mpArrayL <|> attempt mpArrayD
+    
+    let mpStructExpr =
+        between
+            (str_wsl "{")
+            (pstring "}")
+            (sepBy (ws >>. mpExpr .>> ws) (pchar ','))
+
+    mpStructConstR.Value<-
+        mpIdentifier .>>. mpStructExpr |>> MpStructConst |> mpPosition
 
     let mpInvokeVar =
         between (str_ws "(") (pstring ")") (sepBy (ws >>. mpExpr .>> ws) (pchar ','))
@@ -461,6 +475,16 @@ module Parser =
 
     let mpFunc =
         pipe4 getPosition (str_ws "func") mpIdentifier mpFuncVar (fun p _ x y -> MpFunc(x, y, p))
+        
+    let mpStructProp =
+        between
+            (str_wsl "{")
+            (pstring "}")
+            (sepBy (wsl >>. mpIdentifier .>> wsl) (pchar ','))
+
+    let mpStruct=
+        pipe4 getPosition (str_ws "struct") mpIdentifier mpStructProp (fun p _ x y -> MpStruct(x, y, p))
+        
 
     let mpReturnValue = pipe2 (str_ws "return") mpExpr (fun _ -> MpReturn)
 
@@ -477,7 +501,7 @@ module Parser =
         [ mpAssign; mpExprInstr; mpReturn; mpBreak ] |> List.map attempt |> choice
 
     let mpBlockInstruct =
-        [ mpWhile; mpFor; mpStart; mpEnd; mpIf; mpElIf; mpElse; mpFunc ]
+        [ mpWhile; mpFor; mpStart; mpEnd; mpIf; mpElIf; mpElse; mpFunc;mpStruct ]
         |> List.map attempt
         |> choice
 
