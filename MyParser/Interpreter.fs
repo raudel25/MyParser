@@ -98,12 +98,8 @@ module Interpreter =
 
             getIndices state value indices 0
         | MpSlice (identifier, start, stop) ->
-            if not (vars.ContainsKey(identifier)) then
-                raise (Exception(error pos "Variable does not exist"))
-
+            let value = eval state identifier
             let start, stop = (eval state start, eval state stop)
-
-            let value = vars[identifier]
 
             match (value, start, stop) with
             | MpArrayValue v, MpInt start, MpInt stop -> MpArrayValue v[start .. stop - 1]
