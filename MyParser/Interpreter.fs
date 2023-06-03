@@ -78,14 +78,7 @@ module Interpreter =
                     raise (Exception(error pos "Variable does not exist"))
 
                 vars[identifier]
-        | MpArrayL a ->
-            let newA = Array.create a.Length MpNull
-
-            for i in 0 .. (a.Length - 1) do
-                let result = eval state a[i]
-                newA[i] <- result
-
-            MpArrayValue newA
+        | MpArrayL a -> MpArrayValue(Array.map (eval state) a)
         | MpArrayD (a, b) ->
             let a = eval state a
             let _, pos = b
@@ -94,7 +87,8 @@ module Interpreter =
             match b with
             | MpInt b -> MpArrayValue(Array.create b a)
             | _ -> raise (Exception(error pos "Cannot convert to int"))
-        | MpIndex (identifier, indices) ->
+        | MpTuple a -> MpTupleValue(Array.map (eval state) a)
+        | MpIdentProp (identifier, indices) ->
             if not (vars.ContainsKey(identifier)) then
                 raise (Exception(error pos "Variable does not exist"))
 
@@ -193,12 +187,8 @@ module Interpreter =
         | MpXor, MpBool l, MpBool r -> MpBool((not l && r) || (not r && l))
         | _, _, _ -> raise (Exception(error pos "Logical operation is not supported"))
 
-    and getIndices (state: ProgramState) (value: value) (indices: expr list) ind =
-        let _, pos = indices[ind]
-        let index = toInt pos (eval state indices[ind])
-
-        match value with
-        | MpArrayValue v ->
+    and getIndices (state: ProgramState) (value: value) (indices: property list) ind =
+        let getArray (v: value[]) index =
             if index < 0 || index >= v.Length then
                 raise (IndexOutOfRangeException())
 
@@ -206,22 +196,30 @@ module Interpreter =
                 v[index]
             else
                 getIndices state v[index] indices (ind + 1)
-        | MpString v ->
-            if index < 0 || index >= v.Length then
-                raise (IndexOutOfRangeException())
 
-            if ind = 0 && indices.Length = 1 then
-                MpChar v[index]
-            else
-                raise (Exception(error pos "The indexed value is not correct"))
-        | _ -> raise (Exception(error pos "The indexed value is not correct"))
+        match indices[ind] with
+        | MpIndexA index ->
+            let _, pos = index
+            let index = toInt pos (eval state index)
 
-    and setIndices (state: ProgramState) (value: value) (indices: expr list) ind (e: value) =
-        let _, pos = indices[ind]
-        let index = toInt pos (eval state indices[ind])
+            match value with
+            | MpArrayValue v -> getArray v index
+            | MpString v ->
+                if index < 0 || index >= v.Length then
+                    raise (IndexOutOfRangeException())
 
-        match value with
-        | MpArrayValue v ->
+                if ind = 0 && indices.Length = 1 then
+                    MpChar v[index]
+                else
+                    raise (Exception(error pos "The indexed value is not correct"))
+            | _ -> raise (Exception(error pos "The indexed value is not correct"))
+        | MpIndexT (index, pos) ->
+            match value with
+            | MpTupleValue v -> getArray v index
+            | _ -> raise (Exception(error pos "The property is not correct"))
+
+    and setIndices (state: ProgramState) (value: value) (indices: property list) ind (e: value) =
+        let setArray (v: value[]) index =
             if index < 0 || index >= v.Length then
                 raise (IndexOutOfRangeException())
 
@@ -230,7 +228,15 @@ module Interpreter =
             else
                 setIndices state v[index] indices (ind + 1) e
 
-        | _ -> raise (Exception(error pos "The indexed value is not correct"))
+        match indices[ind] with
+        | MpIndexA index ->
+            let _, pos = index
+            let index = toInt pos (eval state index)
+
+            match value with
+            | MpArrayValue v -> setArray v index
+            | _ -> raise (Exception(error pos "The indexed set is not correct"))
+        | MpIndexT (_, pos) -> raise (Exception(error pos "The indexed set is not correct"))
 
     and mpRunAux (state: ProgramState) pi pe =
         let (variables: VarLookup, functions: FunctionsLookup, program: instruction[]) =
@@ -252,7 +258,7 @@ module Interpreter =
                         raise (Exception(error pos "There are two terms with the same name"))
 
                     variables[identifier] <- evalAux expr
-                | MpIndex (identifier, indices) ->
+                | MpIdentProp (identifier, indices) ->
                     let value = variables[identifier]
 
                     setIndices state value indices 0 (evalAux expr)

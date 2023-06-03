@@ -37,11 +37,13 @@ type value =
     | MpDouble of double
     | MpString of string
     | MpChar of char
+    | MpTupleValue of value[]
     | MpArrayValue of value[]
     | MpFuncValue of identifier
 
 type exprT =
-    | MpIndex of identifier * expr list
+    | MpIdentProp of identifier * property list
+    | MpTuple of expr[]
     | MpArrayL of expr[]
     | MpArrayD of expr * expr
     | MpSlice of identifier * expr * expr
@@ -57,6 +59,11 @@ type exprT =
     | MpTernary of expr * expr * expr
 
 and expr = exprT * Position
+
+and property =
+    | MpIndexA of expr
+    | MpProperty of identifier * Position
+    | MpIndexT of int * Position
 
 type assign = Set of expr * expr
 
@@ -196,7 +203,9 @@ module Parser =
 
     let mpArray, mpArrayR = createParserForwardedToRef ()
 
-    let mpIndex, mpIndexR = createParserForwardedToRef ()
+    let mpTuple, mpTupleR = createParserForwardedToRef ()
+
+    let mpIdentProp, mpIdentPropR = createParserForwardedToRef ()
 
     let mpInvoke, mpInvokeR = createParserForwardedToRef ()
 
@@ -209,7 +218,7 @@ module Parser =
     let mpValue =
         choice
             [ attempt mpSlice
-              attempt mpIndex
+              attempt mpIdentProp
               attempt mpInvoke
               attempt mpReservedFunc
               mpNum
@@ -270,8 +279,20 @@ module Parser =
     oppL.AddOperator(InfixOperator("||", ws, 1, Assoc.Left, (fun (x, p) y -> MpLogical((x, p), MpOr, y), p)))
     oppL.AddOperator(InfixOperator("^^", ws, 1, Assoc.Left, (fun (x, p) y -> MpLogical((x, p), MpXor, y), p)))
 
-    mpIndexR.Value <-
-        pipe2 mpIdentifier (many1 (str_ws "[" >>. mpArithmetic .>> str_ws "]")) (fun x y -> MpIndex(x, y))
+    let mpIndexA = between (str_ws "[") (ws >>. pstring "]") mpArithmetic |>> MpIndexA
+
+    let mpIndexT =
+        getPosition .>>. (((pchar '.') .>>. pint32) |>> snd)
+        |>> (fun (x, y) -> y, x)
+        |>> MpIndexT
+
+    let mpProperty =
+        getPosition .>>. ((pchar '.') .>>. mpIdentifier |>> snd)
+        |>> (fun (x, y) -> y, x)
+        |>> MpProperty
+
+    mpIdentPropR.Value <-
+        pipe2 mpIdentifier (many1 (mpIndexA <|> mpIndexT <|> mpProperty)) (fun x y -> MpIdentProp(x, y))
         |> mpPosition
 
     let mpSliceInd =
@@ -282,10 +303,18 @@ module Parser =
         |> mpPosition
 
     let mpExpr =
-        attempt mpTernary <|> mpLogical <|> mpComparison <|> mpArithmetic <|> mpArray
+        [ mpTernary; mpLogical; mpComparison; mpArithmetic; mpArray; mpTuple ]
+        |> List.map attempt
+        |> choice
 
     mpTernaryR.Value <-
         pipe5 mpLogical (str_ws "?") mpExpr (str_ws ":") mpExpr (fun (l, p) _ e1 _ e2 -> MpTernary((l, p), e1, e2), p)
+
+    mpTupleR.Value <-
+        (between (pchar '(') (pchar ')') (sepBy (ws >>. mpExpr .>> ws) (pchar ',')))
+        |>> List.toArray
+        |>> MpTuple
+        |> mpPosition
 
     let mpArrayL =
         (between (pchar '[') (pchar ']') (sepBy (ws >>. mpExpr .>> ws) (pchar ',')))
@@ -369,7 +398,7 @@ module Parser =
         pipe3 mpVar (ws >>. (str_ws "=")) mpExpr (fun id _ e -> MpAssign(Set(id, e)))
 
     let mpAssignE =
-        pipe3 mpIndex (ws >>. (str_ws "=")) mpExpr (fun id _ e -> MpAssign(Set(id, e)))
+        pipe3 mpIdentProp (ws >>. (str_ws "=")) mpExpr (fun id _ e -> MpAssign(Set(id, e)))
 
     let mpAssign =
         [ mpAssignAnd
