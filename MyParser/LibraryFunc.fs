@@ -28,7 +28,7 @@ module internal LibraryFunc =
         | MpString x -> x
         | MpChar x -> string x
         | MpNull -> "null"
-        | MpFuncValue s -> s
+        | MpFuncValue _ -> "function"
         | MpArrayValue x ->
             let mutable s = "[ "
             s <- s + (aux x)
@@ -56,7 +56,6 @@ module internal LibraryFunc =
         | MpString x -> printf $"%s{x}"
         | MpChar x -> printf $"%c{x}"
         | MpNull -> printf "null"
-        | MpFuncValue s -> printf $"%s{s}"
         | _ -> printf $"%s{toStr value}"
 
         MpNull

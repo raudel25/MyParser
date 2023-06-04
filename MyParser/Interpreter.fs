@@ -71,7 +71,8 @@ module Interpreter =
         | MpLiteral x -> x
         | MpVar identifier ->
             if functions.ContainsKey(identifier) then
-                MpFuncValue identifier
+                let x, y, z, w = functions[identifier]
+                MpFuncValue(x,y,z,w)
             else
                 if not (vars.ContainsKey(identifier)) then
                     raise (Exception(error pos "Variable does not exist"))
@@ -111,13 +112,10 @@ module Interpreter =
             let s = eval state s
 
             match s with
-            | MpFuncValue func ->
-                if not (functions.ContainsKey(func)) then
-                    raise (Exception(error pos "Function does not exist"))
-
+            | MpFuncValue (identifiers, globals, start, stop) ->
                 let variables = VarLookup()
-                let identifiers, globals, start, stop = functions[func]
-
+                let newFunctions = FunctionsLookup()
+                
                 if identifiers.Length <> expr.Length then
                     raise (Exception(error pos "Function does not have correct parameters"))
 
@@ -127,7 +125,10 @@ module Interpreter =
                 for var in globals do
                     variables[var] <- vars[var]
 
-                let aux = mpRunAux (ProgramState(variables, functions, structs, program)) start stop
+                for f in functions do
+                    newFunctions[f.Key] <- f.Value
+
+                let aux = mpRunAux (ProgramState(variables, newFunctions, structs, program)) start stop
 
                 for var in globals do
                     vars[var] <- variables[var]
@@ -136,7 +137,7 @@ module Interpreter =
             | _ -> raise (Exception(error pos "Expression is not function"))
         | MpReservedFunc0 s -> funcLib0 s
         | MpReservedFunc1 (s, expr) ->
-            let _,pos=expr
+            let _, pos = expr
             funcLib1 pos s (eval state expr)
         | MpTernary (cond, e1, e2) ->
             let cond = eval state cond
@@ -245,7 +246,7 @@ module Interpreter =
     and setIndices (state: ProgramState) (value: value) (indices: property list) ind (e: value) =
         let setArray pos (v: value[]) index =
             if index < 0 || index >= v.Length then
-                raise (Exception(error pos  "Index out range"))
+                raise (Exception(error pos "Index out range"))
 
             if ind = indices.Length - 1 then
                 v[index] <- e
@@ -540,7 +541,7 @@ module Interpreter =
         with ex ->
             let s = ex.Message.Split('\n')
 
-            if s.Length>1&&s[1] = "Not find end block instruction }" then
+            if s.Length > 1 && s[1] = "Not find end block instruction }" then
                 start
             else
                 raise (Exception(ex.Message))
