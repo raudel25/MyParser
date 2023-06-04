@@ -39,7 +39,7 @@ type value =
     | MpChar of char
     | MpTupleValue of value[]
     | MpArrayValue of value[]
-    | MpFuncValue of identifier list * List<identifier> * int * int
+    | MpFuncValue of identifier * identifier list * List<identifier> * int * int
     | MpStructValue of identifier * Hashtable<identifier, value>
 
 type exprT =

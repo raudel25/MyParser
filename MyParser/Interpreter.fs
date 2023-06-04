@@ -56,7 +56,7 @@ module Interpreter =
         | _ -> raise (Exception(error pos $"%A{lhs} %A{rhs}"))
 
     type VarLookup = Dictionary<identifier, value>
-    type FunctionsLookup = Dictionary<identifier, identifier list * List<identifier> * int * int>
+    type FunctionsLookup = Dictionary<identifier, identifier * identifier list * List<identifier> * int * int>
     type StructLookup = Dictionary<identifier, identifier list>
     type State = VarLookup * FunctionsLookup * StructLookup
     type ProgramState = VarLookup * FunctionsLookup * StructLookup * instruction[]
@@ -71,8 +71,8 @@ module Interpreter =
         | MpLiteral x -> x
         | MpVar identifier ->
             if functions.ContainsKey(identifier) then
-                let x, y, z, w = functions[identifier]
-                MpFuncValue(x,y,z,w)
+                let s,x, y, z, w = functions[identifier]
+                MpFuncValue(s,x,y,z,w)
             else
                 if not (vars.ContainsKey(identifier)) then
                     raise (Exception(error pos "Variable does not exist"))
@@ -112,7 +112,7 @@ module Interpreter =
             let s = eval state s
 
             match s with
-            | MpFuncValue (identifiers, globals, start, stop) ->
+            | MpFuncValue (_,identifiers, globals, start, stop) ->
                 let variables = VarLookup()
                 let newFunctions = FunctionsLookup()
                 
@@ -483,7 +483,7 @@ module Interpreter =
 
                 let newVars = List.map fst vars
 
-                functions[identifier] <- (newVars, globals, pi + 1, index + 1)
+                functions[identifier] <- (identifier, newVars, globals, pi + 1, index + 1)
 
                 for i in vars do
                     let i, p = i

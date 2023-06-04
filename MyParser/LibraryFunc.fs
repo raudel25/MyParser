@@ -10,15 +10,18 @@ module internal LibraryFunc =
 
     let rec toStr value =
         let aux (x: value[]) =
-            let mutable s = ""
+            if x.Length = 0 then
+                ""
+            else
+                let mutable s = ""
 
-            for i in 0 .. x.Length - 2 do
-                s <- s + toStr x[i]
-                s <- s + " , "
+                for i in 0 .. x.Length - 2 do
+                    s <- s + toStr x[i]
+                    s <- s + " , "
 
-            s <- s + toStr x[x.Length - 1]
+                s <- s + toStr x[x.Length - 1]
 
-            s
+                s
 
         match value with
         | MpInt x -> string x
@@ -28,7 +31,20 @@ module internal LibraryFunc =
         | MpString x -> x
         | MpChar x -> string x
         | MpNull -> "null"
-        | MpFuncValue _ -> "function"
+        | MpFuncValue (x, y, _, _, _) ->
+            if y.Length = 0 then
+                x + " ()"
+            else
+                let mutable s = x + " ( "
+
+                for i in 0 .. y.Length - 2 do
+                    s <- s + y[i]
+                    s <- s + " , "
+
+                s <- s + y[y.Length - 1] + " )"
+
+                s
+
         | MpArrayValue x ->
             let mutable s = "[ "
             s <- s + (aux x)

@@ -38,7 +38,7 @@ una vez en la consola interactiva puede escribir su programa y finalizar el mism
 
 ### Tipos
 
-El lenguaje es de tipado dinámico y soporta los siguientes tipos: **int**, **double**, **string**, **char** y **array**.
+El lenguaje es de tipado dinámico y soporta los siguientes tipos: **int**, **double**, **string**, **char** y **array**. Los tipos personalizados se pueden definir usando **struct**.
 
 ```
 a = 2 + 3;
@@ -69,7 +69,7 @@ i = 10;
 while (i > -1)
 {
     printLn(i);
-    i = i - 1;
+    i -= 1;
 }
 ```
 
@@ -96,7 +96,7 @@ else
 
 ### Funciones
 
-Las funciones se declaran con la palabra reservada **func** y luego se especifican el nombre y los parámetros de la función.
+Las funciones se declaran con la palabra reservada **func** y luego se especifican el nombre y los parámetros de la función. Además las funciones pueden ser tratadas al mismo nivel que las variables lo que permite que se puedan asignar o pasar como parámetros a otra función.
 
 ```
 func gcd( x , y )
@@ -110,4 +110,27 @@ func gcd( x , y )
 
     return x;
 }
+
+a = gcd;
+b = [ a , gcd ];
 ```
+
+### Structs 
+
+Para definir tipos personalizados se pueden usar los structs, los cuales permiten crear una estructura con varias propiedades.
+
+```
+struct point{ x , y }
+
+p = point{ 1 + 2 , 2 };
+
+printLn(p.x);
+```
+
+### Funciones Predefinidas
+
+- `printLn` y `printL`: Imprime en la terminal.
+- `input`: Retorna un **string**, que es introducido por el usuario en la terminal.
+- `int`: Convierte un tipo a **int**.
+- `double`: Convierte un tipo a **double**.
+- `str`: Convierte un tipo a **string**.
