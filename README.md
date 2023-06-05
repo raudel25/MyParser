@@ -134,3 +134,4 @@ printLn(p.x);
 - `int`: Convierte un tipo a **int**.
 - `double`: Convierte un tipo a **double**.
 - `str`: Convierte un tipo a **string**.
+- `char`: Convierte un tipo a **char**.

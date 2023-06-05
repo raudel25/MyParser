@@ -64,6 +64,12 @@ module internal LibraryFunc =
             s <- s[.. s.Length - 3] + "}"
             s
 
+    let toChar pos value =
+        match value with
+        | MpInt n -> MpChar(char n)
+        | MpChar c -> MpChar c
+        | _ -> raise (Exception(error pos "Cannot convert to char"))
+
     let printL (value: value) : value =
         match value with
         | MpInt x -> printf $"%d{x}"
@@ -129,4 +135,5 @@ module internal LibraryFunc =
         | "int" -> toInt pos value
         | "double" -> toDouble pos value
         | "str" -> MpString(toStr value)
+        | "char" -> toChar pos value
         | _ -> MpNull
