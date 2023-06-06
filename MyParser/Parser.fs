@@ -524,9 +524,17 @@ module Parser =
     let mpInstruction =
         ws >>. ((mpInstruct .>> mpEndInst) <|> mpBlockInstruct <|> mpComment) .>> wsl
 
+    let mpSimpleBlock =
+        (wsl >>. ((mpInstruct .>> mpEndInst) <|> mpBlockInstruct) .>> wsl)
+        |>> (fun x -> List.toArray [ x ])
+
+
     mpBlockR.Value <-
-        between (wsl >>. str_wsl "{") (str_wsl "}") (many mpInstruction)
-        |>> List.toArray
+        attempt (
+            between (wsl >>. str_wsl "{") (str_wsl "}") (many mpInstruction)
+            |>> List.toArray
+        )
+        <|> mpSimpleBlock
 
     let mpLines = many mpInstruction .>> eof
 
