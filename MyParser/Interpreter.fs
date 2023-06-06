@@ -56,37 +56,32 @@ module Interpreter =
         | _ -> raise (Exception(error pos $"%A{lhs} %A{rhs}"))
 
     type VarLookup = Dictionary<identifier, value>
-    type FunctionsLookup = Dictionary<identifier, identifier * identifier list * List<identifier> * instruction[]>
+    type FunctionsLookup = Dictionary<identifier, identifier * identifier list * identifier list * instruction[]>
     type StructLookup = Dictionary<identifier, identifier list>
     type State = VarLookup * FunctionsLookup * StructLookup
     type ProgramState = VarLookup * FunctionsLookup * StructLookup * instruction[]
 
     let globalFunVars (variables: VarLookup) vars =
-        let globals = List<identifier>()
-
         let contains var =
-            let mutable q = false
+            List.exists (fun (i, _) -> i = var) vars
 
-            for i in vars do
-                let i, _ = i
-                q <- q || i = var
+        let rec f l =
+            match l with
+            | l :: t -> if not (contains l) then l :: (f t) else (f t)
+            | [] -> []
 
-            q
+        let variables = List.ofSeq variables.Keys
 
-        for i in variables do
-            if not (contains i.Key) then
-                globals.Add(i.Key)
-
-        globals
+        (f variables)
 
 
     let checkFuncVars vars (functions: FunctionsLookup) (structs: StructLookup) =
-        for i in vars do
-            let i, p = i
-
+        let f (i, p) =
             if functions.ContainsKey(i) || structs.ContainsKey(i) then
                 raise (Exception(error p "There are two terms with the same name"))
 
+        let _ = List.map f vars
+        ()
 
     let rec eval (state: ProgramState) (expr: expr) =
         let (variables: VarLookup, functions: FunctionsLookup, structs: StructLookup, _: instruction[]) =
@@ -105,7 +100,7 @@ module Interpreter =
                     raise (Exception(error pos "Variable does not exist"))
 
                 variables[identifier]
-                
+
         | MpArrayL a -> MpArrayValue(Array.map (eval state) a)
         | MpArrayD (a, b) ->
             let a = eval state a
@@ -115,9 +110,9 @@ module Interpreter =
             match b with
             | MpInt b -> MpArrayValue(Array.create b a)
             | _ -> raise (Exception(error pos "Cannot convert to int"))
-            
+
         | MpTuple a -> MpTupleValue(Array.map (eval state) a)
-        
+
         | MpIdentProp (identifier, indices) ->
             if not (variables.ContainsKey(identifier)) then
                 raise (Exception(error pos "Variable does not exist"))
@@ -125,7 +120,7 @@ module Interpreter =
             let value = variables[identifier]
 
             getProp state value indices 0
-            
+
         | MpSlice (identifier, start, stop) ->
             let value = eval state identifier
             let start, stop = (eval state start, eval state stop)
@@ -136,13 +131,13 @@ module Interpreter =
             | _ -> raise (Exception(error pos "Slice is not supported"))
 
         | MpNeg x -> arithmetic pos (eval state x) MpMultiply (MpInt(-1))
-        
+
         | MpArithmetic (l, op, r) -> arithmetic pos (eval state l) op (eval state r)
-        
+
         | MpComparison (l, op, r) -> comparison pos (eval state l) op (eval state r)
-        
+
         | MpLogical (l, op, r) -> logical pos (eval state l) op (eval state r)
-        
+
         | MpInvoke (s, expr) ->
             let s = eval state s
 
@@ -154,29 +149,27 @@ module Interpreter =
                 if identifiers.Length <> expr.Length then
                     raise (Exception(error pos "Function does not have correct parameters"))
 
-                for i in 0 .. identifiers.Length - 1 do
-                    vars[identifiers[i]] <- (eval state expr[i])
+                let _ =
+                    List.map (fun i -> vars[identifiers[i]] <- (eval state expr[i])) [ 0 .. identifiers.Length - 1 ]
 
-                for var in globals do
-                    vars[var] <- variables[var]
+                let _ = List.map (fun var -> vars[var] <- variables[var]) globals
 
-                for f in functions do
-                    newFunctions[f.Key] <- f.Value
+                let _ =
+                    List.map (fun f -> newFunctions[f] <- functions[f]) (List.ofSeq functions.Keys)
 
                 let aux = mpRunAux (ProgramState(vars, newFunctions, structs, block))
 
-                for var in globals do
-                    variables[var] <- vars[var]
+                let _ = List.map (fun var -> variables[var] <- vars[var]) globals
 
                 aux
             | _ -> raise (Exception(error pos "Expression is not function"))
-            
+
         | MpReservedFunc0 s -> funcLib0 s
-        
+
         | MpReservedFunc1 (s, expr) ->
             let _, pos = expr
             funcLib1 pos s (eval state expr)
-            
+
         | MpTernary (cond, e1, e2) ->
             let cond = eval state cond
 
@@ -193,8 +186,8 @@ module Interpreter =
 
             let q = Dictionary<identifier, value>()
 
-            for i in 0 .. listProps.Length - 1 do
-                q[listProps[i]] <- (eval state props[i])
+            let _ =
+                List.map (fun i -> q[listProps[i]] <- (eval state props[i])) [ 0 .. listProps.Length - 1 ]
 
             MpStructValue(s, q)
 
@@ -272,12 +265,12 @@ module Interpreter =
                 else
                     raise (Exception(error pos "The indexed value is not correct"))
             | _ -> raise (Exception(error pos "The indexed value is not correct"))
-            
+
         | MpIndexT (index, pos) ->
             match value with
             | MpTupleValue v -> getArray pos v index
             | _ -> raise (Exception(error pos "The property is not correct"))
-            
+
         | MpProperty (prop, pos) ->
             match value with
             | MpStructValue (_, v) ->
@@ -305,9 +298,9 @@ module Interpreter =
             match value with
             | MpArrayValue v -> setArray pos v index
             | _ -> raise (Exception(error pos "The indexed set is not correct"))
-            
+
         | MpIndexT (_, pos) -> raise (Exception(error pos "The indexed set is not correct"))
-        
+
         | MpProperty (prop, pos) ->
             match value with
             | MpStructValue (_, v) ->
@@ -361,7 +354,7 @@ module Interpreter =
             | MpAssign set ->
                 assign set
                 false
-                
+
             | MpIf (cond, block) ->
                 let _, pos = cond
 
@@ -369,7 +362,7 @@ module Interpreter =
                     executeBlock block whileOrFor
                 else
                     false
-                    
+
             | MpElse (cond, blockIf, blockElse) ->
                 let _, pos = cond
 
@@ -377,7 +370,7 @@ module Interpreter =
                     executeBlock blockIf whileOrFor
                 else
                     executeBlock blockElse whileOrFor
-                    
+
             | MpElIf (condIf, blockIf, condElIf, blockElIf) ->
                 let _, posIf = condIf
                 let _, posElIf = condElIf
@@ -388,7 +381,7 @@ module Interpreter =
                     executeBlock blockElIf whileOrFor
                 else
                     false
-                    
+
             | MpElIfElse (condIf, blockIf, condElIf, blockElIf, blockElse) ->
                 let _, posIf = condIf
                 let _, posElIf = condElIf
@@ -399,7 +392,7 @@ module Interpreter =
                     executeBlock blockElIf whileOrFor
                 else
                     executeBlock blockElse whileOrFor
-                    
+
             | MpFor (identifier, initE, stopE, stepE, block, pos) ->
                 let toIntAux expr =
                     let value = (evalAux expr)
@@ -433,7 +426,7 @@ module Interpreter =
                         q <- false
 
                 false
-                
+
             | MpExpr x ->
                 let _ = evalAux x
                 false
@@ -447,7 +440,7 @@ module Interpreter =
                 checkFuncVars vars functions structs
 
                 false
-                
+
             | MpReturn expr ->
                 valueReturn <- evalAux expr
                 stopFunc <- true
@@ -466,7 +459,7 @@ module Interpreter =
                 structs[identifier] <- vars
 
                 false
-                
+
             | MpComment -> false
 
         and executeBlock block whileOrFor =
@@ -500,6 +493,7 @@ module Interpreter =
 
         let _ = mpRunAux (ProgramState(variables, functions, structs, program))
         ()
+
     let mpRun (program: instruction[]) =
         let variables = VarLookup()
         let functions = FunctionsLookup()

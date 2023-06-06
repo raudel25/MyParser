@@ -39,7 +39,7 @@ type value =
     | MpChar of char
     | MpTupleValue of value[]
     | MpArrayValue of value[]
-    | MpFuncValue of identifier * identifier list * List<identifier> * instruction[]
+    | MpFuncValue of identifier * identifier list * identifier list * instruction[]
     | MpStructValue of identifier * Hashtable<identifier, value>
 
 and exprT =
@@ -323,13 +323,13 @@ module Parser =
         pipe5 mpLogical (str_ws "?") mpExpr (str_ws ":") mpExpr (fun (l, p) _ e1 _ e2 -> MpTernary((l, p), e1, e2), p)
 
     mpTupleR.Value <-
-        (between (pchar '(') (pchar ')') (sepBy (wsl >>. mpExpr .>> wsl) (pchar ',')))
+        (between (str_ws "(") (pstring ")") (sepBy (wsl >>. mpExpr .>> wsl) (pchar ',')))
         |>> List.toArray
         |>> MpTuple
         |> mpPosition
 
     let mpArrayL =
-        (between (pchar '[') (pchar ']') (sepBy (wsl >>. mpExpr .>> wsl) (pchar ',')))
+        (between (str_ws "[") (pstring "]") (sepBy (wsl >>. mpExpr .>> wsl) (pchar ',')))
         |>> List.toArray
         |>> MpArrayL
         |> mpPosition

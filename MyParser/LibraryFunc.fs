@@ -10,18 +10,13 @@ module LibraryFunc =
 
     let rec toStr value =
         let aux (x: value[]) =
-            if x.Length = 0 then
-                ""
-            else
-                let mutable s = ""
+            let rec f i : string =
+                if i = x.Length - 1 then
+                    toStr x[x.Length - 1]
+                else
+                    $"{toStr x[i]} , {f (i + 1)}"
 
-                for i in 0 .. x.Length - 2 do
-                    s <- s + toStr x[i]
-                    s <- s + " , "
-
-                s <- s + toStr x[x.Length - 1]
-
-                s
+            if x.Length = 0 then "" else f 0
 
         match value with
         | MpInt x -> string x
@@ -33,36 +28,21 @@ module LibraryFunc =
         | MpNull -> "null"
         | MpFuncValue (x, y, _, _) ->
             if y.Length = 0 then
-                x + " ()"
+                $"{x} ()"
             else
-                let mutable s = x + " ( "
+                let y = List.map MpString y |> List.toArray
+                $"{x} ( {aux y} )"
 
-                for i in 0 .. y.Length - 2 do
-                    s <- s + y[i]
-                    s <- s + " , "
-
-                s <- s + y[y.Length - 1] + " )"
-
-                s
-
-        | MpArrayValue x ->
-            let mutable s = "[ "
-            s <- s + (aux x)
-            s <- s + " ]"
-            s
-        | MpTupleValue x ->
-            let mutable s = "( "
-            s <- s + (aux x)
-            s <- s + " )"
-            s
+        | MpArrayValue x -> $"[ {aux x} ]"
+        | MpTupleValue x -> $"( {aux x} )"
         | MpStructValue (x, y) ->
-            let mutable s = x + " { "
-
-            for i in y do
-                s <- s + $"{i.Key} = {toStr i.Value} , "
-
-            s <- s[.. s.Length - 3] + "}"
-            s
+            if y.Count = 0 then
+                x + "{}"
+            else
+                let y =List.map MpString (List.ofSeq y.Keys) |> List.toArray 
+                let s1 = x + " { "
+                let s2 = (aux y) + " }"
+                s1 + s2
 
     let toChar pos value =
         match value with
