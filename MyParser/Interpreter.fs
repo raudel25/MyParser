@@ -155,7 +155,7 @@ module Interpreter =
                     raise (Exception(error pos "Function does not have correct parameters"))
 
                 for i in 0 .. identifiers.Length - 1 do
-                    variables[identifiers[i]] <- (eval state expr[i])
+                    vars[identifiers[i]] <- (eval state expr[i])
 
                 for var in globals do
                     vars[var] <- variables[var]

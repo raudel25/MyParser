@@ -223,6 +223,8 @@ module Parser =
 
     let mpBlock, mpBlockR = createParserForwardedToRef ()
 
+    let mpLambda, mpLambdaR = createParserForwardedToRef ()
+
     let mpValue =
         [ mpInvoke
           mpReservedFunc
@@ -302,16 +304,6 @@ module Parser =
     mpIdentPropR.Value <-
         pipe2 mpIdentifier (many1 (attempt mpIndexA <|> attempt mpIndexT <|> attempt mpProperty)) (fun x y ->
             MpIdentProp(x, y))
-        |> mpPosition
-
-    let mpFuncVar =
-        between
-            (str_ws "(")
-            (pstring ")")
-            (sepBy ((ws >>. getPosition .>>. mpIdentifier .>> ws) |>> (fun (x, y) -> (y, x))) (pchar ','))
-
-    let mpLambda =
-        pipe3 mpFuncVar (str_ws "=>") mpBlock (fun x _ y -> MpLambda(x, y))
         |> mpPosition
 
     let mpExpr =
@@ -488,6 +480,12 @@ module Parser =
     let mpElIfElseI =
         pipe3 mpIf mpElIf mpElse (fun (e1, b1) (e2, b2) b3 -> MpElIfElse(e1, b1, e2, b2, b3))
 
+    let mpFuncVar =
+        between
+            (str_ws "(")
+            (pstring ")")
+            (sepBy ((ws >>. getPosition .>>. mpIdentifier .>> ws) |>> (fun (x, y) -> (y, x))) (pchar ','))
+
     let mpFunc =
         pipe5 getPosition (str_ws "func") mpIdentifier mpFuncVar mpBlock (fun p _ x y b -> MpFunc(x, y, p, b))
 
@@ -530,13 +528,17 @@ module Parser =
         (wsl >>. ((mpInstruct .>> mpEndInst) <|> mpBlockInstruct) .>> wsl)
         |>> (fun x -> List.toArray [ x ])
 
+    let mpComplexBlock =
+        between (wsl >>. str_wsl "{") (str_wsl "}") (many mpInstruction)
+        |>> List.toArray
 
-    mpBlockR.Value <-
-        attempt (
-            between (wsl >>. str_wsl "{") (str_wsl "}") (many mpInstruction)
-            |>> List.toArray
-        )
-        <|> mpSimpleBlock
+    mpBlockR.Value <- attempt mpComplexBlock <|> mpSimpleBlock
+
+    let mpLambdaSimple = mpExpr |>> MpReturn |>> (fun x -> List.toArray [ x ])
+
+    mpLambdaR.Value <-
+        pipe3 mpFuncVar (str_ws "=>") (mpComplexBlock <|> mpLambdaSimple) (fun x _ y -> MpLambda(x, y))
+        |> mpPosition
 
     let mpLines = many mpInstruction .>> eof
 
