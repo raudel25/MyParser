@@ -59,6 +59,7 @@ and exprT =
     | MpReservedFunc1 of identifier * expr
     | MpTernary of expr * expr * expr
     | MpStructConst of identifier * expr list
+    | MpLambda of (identifier * Position) list * instruction[]
 
 and expr = exprT * Position
 
@@ -303,8 +304,19 @@ module Parser =
             MpIdentProp(x, y))
         |> mpPosition
 
+    let mpFuncVar =
+        between
+            (str_ws "(")
+            (pstring ")")
+            (sepBy ((ws >>. getPosition .>>. mpIdentifier .>> ws) |>> (fun (x, y) -> (y, x))) (pchar ','))
+
+    let mpLambda =
+        pipe3 mpFuncVar (str_ws "=>") mpBlock (fun x _ y -> MpLambda(x, y))
+        |> mpPosition
+
     let mpExpr =
-        [ mpStructConst
+        [ mpLambda
+          mpStructConst
           mpTernary
           mpSlice
           mpLogical
@@ -476,12 +488,6 @@ module Parser =
     let mpElIfElseI =
         pipe3 mpIf mpElIf mpElse (fun (e1, b1) (e2, b2) b3 -> MpElIfElse(e1, b1, e2, b2, b3))
 
-    let mpFuncVar =
-        between
-            (str_ws "(")
-            (pstring ")")
-            (sepBy ((ws >>. getPosition .>>. mpIdentifier .>> ws) |>> (fun (x, y) -> (y, x))) (pchar ','))
-
     let mpFunc =
         pipe5 getPosition (str_ws "func") mpIdentifier mpFuncVar mpBlock (fun p _ x y b -> MpFunc(x, y, p, b))
 
@@ -510,10 +516,6 @@ module Parser =
         [ mpWhile; mpFor; mpElIfElseI; mpElIfI; mpElseI; mpIfI; mpFunc; mpStruct ]
         |> List.map attempt
         |> choice
-
-    type Line =
-        | Blank
-        | Instruction of instruction
 
     let mpComment =
         pchar '#' >>. skipManySatisfy (fun c -> c <> '\n') >>. pchar '\n'

@@ -61,8 +61,35 @@ module Interpreter =
     type State = VarLookup * FunctionsLookup * StructLookup
     type ProgramState = VarLookup * FunctionsLookup * StructLookup * instruction[]
 
+    let globalFunVars (variables: VarLookup) vars =
+        let globals = List<identifier>()
+
+        let contains var =
+            let mutable q = false
+
+            for i in vars do
+                let i, _ = i
+                q <- q || i = var
+
+            q
+
+        for i in variables do
+            if not (contains i.Key) then
+                globals.Add(i.Key)
+
+        globals
+
+
+    let checkFuncVars vars (functions: FunctionsLookup) (structs: StructLookup) =
+        for i in vars do
+            let i, p = i
+
+            if functions.ContainsKey(i) || structs.ContainsKey(i) then
+                raise (Exception(error p "There are two terms with the same name"))
+
+
     let rec eval (state: ProgramState) (expr: expr) =
-        let (vars: VarLookup, functions: FunctionsLookup, structs: StructLookup, _: instruction[]) =
+        let (variables: VarLookup, functions: FunctionsLookup, structs: StructLookup, _: instruction[]) =
             state
 
         let expr, pos = expr
@@ -74,10 +101,10 @@ module Interpreter =
                 let s, x, y, z = functions[identifier]
                 MpFuncValue(s, x, y, z)
             else
-                if not (vars.ContainsKey(identifier)) then
+                if not (variables.ContainsKey(identifier)) then
                     raise (Exception(error pos "Variable does not exist"))
 
-                vars[identifier]
+                variables[identifier]
         | MpArrayL a -> MpArrayValue(Array.map (eval state) a)
         | MpArrayD (a, b) ->
             let a = eval state a
@@ -89,10 +116,10 @@ module Interpreter =
             | _ -> raise (Exception(error pos "Cannot convert to int"))
         | MpTuple a -> MpTupleValue(Array.map (eval state) a)
         | MpIdentProp (identifier, indices) ->
-            if not (vars.ContainsKey(identifier)) then
+            if not (variables.ContainsKey(identifier)) then
                 raise (Exception(error pos "Variable does not exist"))
 
-            let value = vars[identifier]
+            let value = variables[identifier]
 
             getProp state value indices 0
         | MpSlice (identifier, start, stop) ->
@@ -113,7 +140,7 @@ module Interpreter =
 
             match s with
             | MpFuncValue (_, identifiers, globals, block) ->
-                let variables = VarLookup()
+                let vars = VarLookup()
                 let newFunctions = FunctionsLookup()
 
                 if identifiers.Length <> expr.Length then
@@ -123,15 +150,15 @@ module Interpreter =
                     variables[identifiers[i]] <- (eval state expr[i])
 
                 for var in globals do
-                    variables[var] <- vars[var]
+                    vars[var] <- variables[var]
 
                 for f in functions do
                     newFunctions[f.Key] <- f.Value
 
-                let aux = mpRunAux (ProgramState(variables, newFunctions, structs, block))
+                let aux = mpRunAux (ProgramState(vars, newFunctions, structs, block))
 
                 for var in globals do
-                    vars[var] <- variables[var]
+                    variables[var] <- vars[var]
 
                 aux
             | _ -> raise (Exception(error pos "Expression is not function"))
@@ -159,6 +186,12 @@ module Interpreter =
                 q[listProps[i]] <- (eval state props[i])
 
             MpStructValue(s, q)
+
+        | MpLambda (vars, block) ->
+            let newVars = List.map fst vars
+            checkFuncVars vars functions structs
+            let globals = globalFunVars variables vars
+            MpFuncValue("lambda", newVars, globals, block)
 
 
     and comparison (pos: Position) lhs op rhs =
@@ -390,30 +423,10 @@ module Interpreter =
             | MpFunc (identifier, vars, pos, block) ->
                 let _ = sameName pos identifier
 
-                let globals = List<identifier>()
-
-                let contains var =
-                    let mutable q = false
-
-                    for i in vars do
-                        let i, _ = i
-                        q <- q || i = var
-
-                    q
-
-                for i in variables do
-                    if not (contains i.Key) then
-                        globals.Add(i.Key)
-
+                let globals = globalFunVars variables vars
                 let newVars = List.map fst vars
-
                 functions[identifier] <- (identifier, newVars, globals, block)
-
-                for i in vars do
-                    let i, p = i
-
-                    if functions.ContainsKey(i) || structs.ContainsKey(i) then
-                        raise (Exception(error p "There are two terms with the same name"))
+                checkFuncVars vars functions structs
 
                 false
             | MpReturn expr ->
