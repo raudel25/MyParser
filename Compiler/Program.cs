@@ -32,37 +32,58 @@ static class Program
         }
     }
 
+    static bool Break(string? instr) => instr is "q" or "quit" or "exit";
+
     static void Interactive()
     {
-        var program = Array.Empty<instruction>();
         var (stateVar, stateFunc, stateStruct) = Interpreter.mpState;
-        var start = 0;
 
         while (true)
         {
             Console.Write(">> ");
             var instr = Console.ReadLine();
 
-            if (instr is "q" or "quit" or "exit") break;
+            if (instr is "init") instr = Block();
+
+            if (Break(instr))
+                break;
+
+            if (instr != null && stateVar.ContainsKey(instr))
+            {
+                Console.WriteLine(LibraryFunc.toStr(stateVar[instr]));
+                continue;
+            }
 
             try
             {
-                var newProgram = Parser.mpParse(instr);
+                var program = Parser.mpParse(instr);
 
-                program = program.Concat(newProgram).ToArray();
-
-                start = Interpreter.mpInteractive(stateVar, stateFunc, stateStruct, program, start);
+                Interpreter.mpInteractive(stateVar, stateFunc, stateStruct, program);
             }
             catch (Exception e)
             {
                 Console.WriteLine(e.Message);
-
-                program = Array.Empty<instruction>();
                 stateVar.Clear();
                 stateFunc.Clear();
-
-                start = 0;
             }
+        }
+    }
+
+    static string? Block()
+    {
+        var instr = "";
+        while (true)
+        {
+            Console.Write(">> ");
+            var newInstr = Console.ReadLine();
+
+            if (newInstr is "end")
+                return instr;
+
+            if (Break(newInstr))
+                return newInstr;
+
+            instr = instr + newInstr + '\n';
         }
     }
 }

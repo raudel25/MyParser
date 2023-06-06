@@ -495,21 +495,11 @@ module Interpreter =
 
         State(variables, functions, structs)
 
-    let mpInteractive (state: State) (program: instruction[]) start =
+    let mpInteractive (state: State) (program: instruction[]) =
         let variables, functions, structs = state
 
-        try
-            let _ = mpRunAux (ProgramState(variables, functions, structs, program))
-
-            program.Length
-        with ex ->
-            let s = ex.Message.Split('\n')
-
-            if s.Length > 1 && s[1] = "Not find end block instruction }" then
-                start
-            else
-                raise (Exception(ex.Message))
-
+        let _ = mpRunAux (ProgramState(variables, functions, structs, program))
+        ()
     let mpRun (program: instruction[]) =
         let variables = VarLookup()
         let functions = FunctionsLookup()

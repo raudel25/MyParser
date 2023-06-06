@@ -4,7 +4,7 @@ open System
 open Microsoft.FSharp.Core
 open FParsec
 
-module internal LibraryFunc =
+module LibraryFunc =
     let error (pos: Position) (s: string) =
         $"Error in Ln: {pos.Line} Col: {pos.Column}\n{s}"
 
