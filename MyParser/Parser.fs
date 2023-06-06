@@ -1,11 +1,10 @@
 ﻿namespace MyParser
 
 open FParsec
-open System.Collections.Generic
 
 type identifier = string
 type index = int
-type Hashtable<'k, 'v> = Dictionary<'k, 'v>
+type HashTable<'k, 'v> = System.Collections.Generic.Dictionary<'k, 'v>
 
 type arithmetic =
     | MpAdd
@@ -40,7 +39,7 @@ type value =
     | MpTupleValue of value[]
     | MpArrayValue of value[]
     | MpFuncValue of identifier * identifier list * identifier list * instruction[]
-    | MpStructValue of identifier * Hashtable<identifier, value>
+    | MpStructValue of identifier * HashTable<identifier, value>
 
 and exprT =
     | MpIdentProp of identifier * property list

@@ -83,6 +83,11 @@ module Interpreter =
         let _ = List.map f vars
         ()
 
+    type stateFunction =
+        | Continue
+        | Break of Position
+        | Return of value
+
     let rec eval (state: ProgramState) (expr: expr) =
         let (variables: VarLookup, functions: FunctionsLookup, structs: StructLookup, _: instruction[]) =
             state
@@ -184,7 +189,7 @@ module Interpreter =
             if listProps.Length <> props.Length then
                 raise (Exception(error pos "Struct does not have correct parameters"))
 
-            let q = Dictionary<identifier, value>()
+            let q = HashTable<identifier, value>()
 
             let _ =
                 List.map (fun i -> q[listProps[i]] <- (eval state props[i])) [ 0 .. listProps.Length - 1 ]
@@ -313,14 +318,9 @@ module Interpreter =
                     setProp state v[prop] indices (ind + 1) e
             | _ -> raise (Exception(error pos "The property is not correct"))
 
-
     and mpRunAux (state: ProgramState) =
         let (variables: VarLookup, functions: FunctionsLookup, structs: StructLookup, program: instruction[]) =
             state
-
-        let mutable index = 0
-        let mutable valueReturn = MpNull
-        let mutable stopFunc = false
         let evalAux = eval state
 
         let assign (value: assign) =
@@ -349,49 +349,49 @@ module Interpreter =
             then
                 raise (Exception(error pos "There are two terms with the same name"))
 
-        let rec step instruction whileOrFor =
+        let rec step instruction =
             match instruction with
             | MpAssign set ->
                 assign set
-                false
+                Continue
 
             | MpIf (cond, block) ->
                 let _, pos = cond
 
                 if toBool pos (evalAux cond) then
-                    executeBlock block whileOrFor
+                    executeBlock block
                 else
-                    false
+                    Continue
 
             | MpElse (cond, blockIf, blockElse) ->
                 let _, pos = cond
 
                 if toBool pos (evalAux cond) then
-                    executeBlock blockIf whileOrFor
+                    executeBlock blockIf
                 else
-                    executeBlock blockElse whileOrFor
+                    executeBlock blockElse
 
             | MpElIf (condIf, blockIf, condElIf, blockElIf) ->
                 let _, posIf = condIf
                 let _, posElIf = condElIf
 
                 if toBool posIf (evalAux condIf) then
-                    executeBlock blockIf whileOrFor
+                    executeBlock blockIf
                 elif toBool posElIf (evalAux condElIf) then
-                    executeBlock blockElIf whileOrFor
+                    executeBlock blockElIf
                 else
-                    false
+                    Continue
 
             | MpElIfElse (condIf, blockIf, condElIf, blockElIf, blockElse) ->
                 let _, posIf = condIf
                 let _, posElIf = condElIf
 
                 if toBool posIf (evalAux condIf) then
-                    executeBlock blockIf whileOrFor
+                    executeBlock blockIf
                 elif toBool posElIf (evalAux condElIf) then
-                    executeBlock blockElIf whileOrFor
+                    executeBlock blockElIf
                 else
-                    executeBlock blockElse whileOrFor
+                    executeBlock blockElse
 
             | MpFor (identifier, initE, stopE, stepE, block, pos) ->
                 let toIntAux expr =
@@ -406,30 +406,45 @@ module Interpreter =
 
                 let _ = assign (Set((MpVar(identifier), pos), initE))
 
-                let mutable q = true
+                // let mutable q = true
+                //
+                // while toInt pos variables[identifier] < stop && q do
+                //     if executeBlock block true then
+                //         q <- false
 
-                while toInt pos variables[identifier] < stop && q do
-                    if executeBlock block true then
-                        q <- false
 
-                    variables[identifier] <- arithmetic pos variables[identifier] MpAdd (MpInt step)
+                let rec loop () =
+                    if toInt pos variables[identifier] >= stop then
+                        Continue
+                    else
 
-                false
+                        match executeBlock block with
+                        | Continue ->
+                            variables[identifier] <- arithmetic pos variables[identifier] MpAdd (MpInt step)
+                            loop ()
+                        | Return v -> Return v
+                        | Break _ -> Continue
+
+                loop ()
 
             | MpWhile (condition, block) ->
-                let _, pos = condition
+                let _,pos=condition
+                
+                let rec loop () =
+                    if not (toBool pos (evalAux condition)) then
+                        Continue
+                    else
+                        match executeBlock block with
+                        | Continue ->
+                            loop ()
+                        | Return v -> Return v
+                        | Break _ -> Continue
 
-                let mutable q = true
-
-                while (evalAux condition |> toBool pos) && q do
-                    if executeBlock block true then
-                        q <- false
-
-                false
+                loop ()
 
             | MpExpr x ->
                 let _ = evalAux x
-                false
+                Continue
 
             | MpFunc (identifier, vars, pos, block) ->
                 let _ = sameName pos identifier
@@ -439,47 +454,44 @@ module Interpreter =
                 functions[identifier] <- (identifier, newVars, globals, block)
                 checkFuncVars vars functions structs
 
-                false
+                Continue
 
-            | MpReturn expr ->
-                valueReturn <- evalAux expr
-                stopFunc <- true
+            | MpReturn expr -> Return(evalAux expr)
 
-                false
-
-            | MpBreak pos ->
-                if not whileOrFor then
-                    raise (Exception(error pos "Incorrect instruction break"))
-
-                true
+            | MpBreak pos -> Break pos
 
             | MpStruct (identifier, vars, pos) ->
                 let _ = sameName pos identifier
 
                 structs[identifier] <- vars
 
-                false
+                Continue
 
-            | MpComment -> false
+            | MpComment -> Continue
 
-        and executeBlock block whileOrFor =
-            let mutable i = 0
-            let mutable q = true
+        and executeBlock block =
+            let rec loop i =
+                if i = block.Length then
+                    Continue
+                else
+                    match step block[i] with
+                    | Continue -> loop (i + 1)
+                    | Return v -> Return v
+                    | Break pos -> Break pos
 
-            while q && i < block.Length do
-                if step block[i] whileOrFor || stopFunc then
-                    q <- false
+            loop 0
 
-                i <- i + 1
+        let rec loop i =
+            if i = program.Length then
+                MpNull
+            else
+                match step program[i] with
+                | Continue -> loop (i + 1)
+                | Return v -> v
+                | Break pos -> raise (Exception(error pos "Incorrect instruction break"))
 
-            not q
 
-        while index < program.Length && not stopFunc do
-            let _ = step program[index] false
-
-            index <- index + 1
-
-        valueReturn
+        loop 0
 
     let mpState =
         let variables = VarLookup()
