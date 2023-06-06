@@ -113,6 +113,32 @@ func gcd( x , y )
 
 a = gcd;
 b = [ a , gcd ];
+``` 
+
+### Bloque de Instrucciones
+
+Las instrucciones anteriores (bucles, funciones y condicionales) se componen de un encabezado que determina el tipo de operación y un bloque de instrucciones que 
+representa la acción a ejecutar, este bloque de instrucciones usualmente se declara entre corchetes pero si se compone de una instrucción también se puede representar de la siguiente manera.
+
+```
+func sum( x , y )
+    return x + y;
+
+for i in 0, 10
+    printLn(sum( 2 , 2 ));
+```
+
+### Azúcar Sintáctica
+
+El lenguaje además cuenta con **slice** para los tipos **array** y **string**, expresiones **ternarias** y expresiones **lambda**.
+
+```
+func mult( x , y ) => x * y
+
+a = 2 > 3 ? "dos es más grande que 3" : "dos no es más grande que 3";
+q = [ 1 , 2 , 3 , 4 ];  
+q = q[0:2];
+l = ( x , y ) => x + y;
 ```
 
 ### Structs 

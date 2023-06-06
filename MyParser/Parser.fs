@@ -486,8 +486,13 @@ module Parser =
             (pstring ")")
             (sepBy ((ws >>. getPosition .>>. mpIdentifier .>> ws) |>> (fun (x, y) -> (y, x))) (pchar ','))
 
+    let mpLambdaSimple = mpExpr |>> MpReturn |>> (fun x -> List.toArray [ x ])
+
+    let mpFuncSimple = (ws >>. str_ws "=>") >>. mpLambdaSimple
+
     let mpFunc =
-        pipe5 getPosition (str_ws "func") mpIdentifier mpFuncVar mpBlock (fun p _ x y b -> MpFunc(x, y, p, b))
+        pipe5 getPosition (str_ws "func") mpIdentifier mpFuncVar (attempt mpBlock <|> mpFuncSimple) (fun p _ x y b ->
+            MpFunc(x, y, p, b))
 
     let mpStructProp =
         between (str_wsl "{") (pstring "}") (sepBy (wsl >>. mpIdentifier .>> wsl) (pchar ','))
@@ -534,10 +539,8 @@ module Parser =
 
     mpBlockR.Value <- attempt mpComplexBlock <|> mpSimpleBlock
 
-    let mpLambdaSimple = mpExpr |>> MpReturn |>> (fun x -> List.toArray [ x ])
-
     mpLambdaR.Value <-
-        pipe3 mpFuncVar (str_ws "=>") (mpComplexBlock <|> mpLambdaSimple) (fun x _ y -> MpLambda(x, y))
+        pipe3 mpFuncVar (ws >>. str_ws "=>") (mpComplexBlock <|> mpLambdaSimple) (fun x _ y -> MpLambda(x, y))
         |> mpPosition
 
     let mpLines = many mpInstruction .>> eof
