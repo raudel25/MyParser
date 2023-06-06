@@ -39,10 +39,10 @@ type value =
     | MpChar of char
     | MpTupleValue of value[]
     | MpArrayValue of value[]
-    | MpFuncValue of identifier * identifier list * List<identifier> * int * int
+    | MpFuncValue of identifier * identifier list * List<identifier> * instruction[]
     | MpStructValue of identifier * Hashtable<identifier, value>
 
-type exprT =
+and exprT =
     | MpIdentProp of identifier * property list
     | MpTuple of expr[]
     | MpArrayL of expr[]
@@ -67,22 +67,22 @@ and property =
     | MpProperty of identifier * Position
     | MpIndexT of int * Position
 
-type assign = Set of expr * expr
+and assign = Set of expr * expr
 
-type instruction =
+and instruction =
     | MpStruct of identifier * identifier list * Position
-    | MpFunc of identifier * (identifier * Position) list * Position
+    | MpFunc of identifier * (identifier * Position) list * Position * instruction[]
     | MpAssign of assign
     | MpExpr of expr
-    | MpFor of identifier * expr * expr * expr * Position
-    | MpIf of expr * Position
-    | MpElIf of expr * Position
-    | MpElse of Position
-    | MpWhile of expr * Position
-    | MpStart
-    | MpEnd
+    | MpFor of identifier * expr * expr * expr * instruction[] * Position
+    | MpIf of expr * instruction[]
+    | MpElIf of expr * instruction[] * expr * instruction[]
+    | MpElse of expr * instruction[] * instruction[]
+    | MpElIfElse of expr * instruction[] * expr * instruction[] * instruction[]
+    | MpWhile of expr * instruction[]
     | MpReturn of expr
     | MpBreak of Position
+    | MpComment
 
 open System
 
@@ -219,6 +219,8 @@ module Parser =
     let mpSlice, mpSliceR = createParserForwardedToRef ()
 
     let mpTernary, mpTernaryR = createParserForwardedToRef ()
+
+    let mpBlock, mpBlockR = createParserForwardedToRef ()
 
     let mpValue =
         [ mpInvoke
@@ -449,23 +451,30 @@ module Parser =
     let mpRange = attempt mpRange3 <|> attempt mpRange2 <|> attempt mpRange1
 
     let mpWhile =
-        pipe5 getPosition (str_ws "while") (str_ws "(") mpLogical (str_ws ")") (fun p _ _ e _ -> MpWhile(e, p))
+        pipe5 (str_ws "while") (str_ws "(") mpLogical (str_ws ")") mpBlock (fun _ _ e _ b -> MpWhile(e, b))
 
-    let mpFor: Parser<instruction, unit> =
-        pipe5 getPosition (str_ws "for") mpIdentifier_ws (str_ws "in") mpRange (fun p _ s _ (x, y, z) ->
-            MpFor(s, x, y, z, p))
+    let mpFor =
+        pipe5 (str_ws "for") mpIdentifier_ws (str_ws "in") mpRange mpBlock (fun _ s _ (x, y, z) b -> (s, x, y, z, b))
+        |> mpPosition
+        |>> (fun ((s, x, y, z, b), p) -> MpFor(s, x, y, z, b, p))
 
     let mpIf =
-        pipe5 getPosition (str_ws "if") (str_ws "(") mpLogical (str_ws ")") (fun p _ _ e _ -> MpIf(e, p))
+        pipe5 (str_ws "if") (str_ws "(") mpLogical (str_ws ")") mpBlock (fun _ _ e _ b -> (e, b))
 
     let mpElIf =
-        pipe5 getPosition (str_ws "elif") (str_ws "(") mpLogical (str_ws ")") (fun p _ _ e _ -> MpElIf(e, p))
+        pipe5 (str_ws "elif") (str_ws "(") mpLogical (str_ws ")") mpBlock (fun _ _ e _ b -> (e, b))
 
-    let mpElse = (getPosition .>>. pstring "else") |>> (fun (p, _) -> MpElse p)
+    let mpElse = (pstring "else") >>. mpBlock
 
-    let mpStart: Parser<instruction, unit> = pstring "{" |>> (fun _ -> MpStart)
+    let mpIfI = mpIf |>> MpIf
 
-    let mpEnd: Parser<instruction, unit> = pstring "}" |>> (fun _ -> MpEnd)
+    let mpElseI = mpIf .>>. mpElse |>> (fun ((e1, b1), b2) -> MpElse(e1, b1, b2))
+
+    let mpElIfI =
+        mpIf .>>. mpElIf |>> (fun ((e1, b1), (e2, b2)) -> MpElIf(e1, b1, e2, b2))
+
+    let mpElIfElseI =
+        pipe3 mpIf mpElIf mpElse (fun (e1, b1) (e2, b2) b3 -> MpElIfElse(e1, b1, e2, b2, b3))
 
     let mpFuncVar =
         between
@@ -474,7 +483,7 @@ module Parser =
             (sepBy ((ws >>. getPosition .>>. mpIdentifier .>> ws) |>> (fun (x, y) -> (y, x))) (pchar ','))
 
     let mpFunc =
-        pipe4 getPosition (str_ws "func") mpIdentifier mpFuncVar (fun p _ x y -> MpFunc(x, y, p))
+        pipe5 getPosition (str_ws "func") mpIdentifier mpFuncVar mpBlock (fun p _ x y b -> MpFunc(x, y, p, b))
 
     let mpStructProp =
         between (str_wsl "{") (pstring "}") (sepBy (wsl >>. mpIdentifier .>> wsl) (pchar ','))
@@ -498,7 +507,7 @@ module Parser =
         [ mpAssign; mpExprInstr; mpReturn; mpBreak ] |> List.map attempt |> choice
 
     let mpBlockInstruct =
-        [ mpWhile; mpFor; mpStart; mpEnd; mpIf; mpElIf; mpElse; mpFunc; mpStruct ]
+        [ mpWhile; mpFor; mpElIfElseI; mpElIfI; mpElseI; mpIfI; mpFunc; mpStruct ]
         |> List.map attempt
         |> choice
 
@@ -506,24 +515,22 @@ module Parser =
         | Blank
         | Instruction of instruction
 
-    let mpComment = pchar '#' >>. skipManySatisfy (fun c -> c <> '\n') >>. pchar '\n'
+    let mpComment =
+        pchar '#' >>. skipManySatisfy (fun c -> c <> '\n') >>. pchar '\n'
+        |>> (fun _ -> MpComment)
 
     let mpEndInst: Parser<char, unit> = wsl >>. pchar ';'
 
-    let mpEol = mpComment <|> (pchar '\n')
-
     let mpInstruction =
-        ws >>. ((mpInstruct .>> mpEndInst) <|> mpBlockInstruct) |>> Instruction
+        ws >>. ((mpInstruct .>> mpEndInst) <|> mpBlockInstruct <|> mpComment) .>> wsl
 
-    let mpBlank = ws >>. mpEol |>> (fun _ -> Blank)
-    let mpLines = many (attempt mpInstruction <|> mpBlank) .>> eof
+    mpBlockR.Value <-
+        between (wsl >>. str_wsl "{") (pstring "}") (many mpInstruction)
+        |>> List.toArray
+
+    let mpLines = many mpInstruction .>> eof
 
     let mpParse (program: string) =
         match run mpLines program with
-        | Success (result, _, _) ->
-            result
-            |> List.choose (function
-                | Instruction i -> Some i
-                | Blank -> None)
-            |> List.toArray
+        | Success (result, _, _) -> result |> List.toArray
         | Failure (errorMsg, _, _) -> failwith errorMsg

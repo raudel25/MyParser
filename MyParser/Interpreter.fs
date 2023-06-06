@@ -56,13 +56,13 @@ module Interpreter =
         | _ -> raise (Exception(error pos $"%A{lhs} %A{rhs}"))
 
     type VarLookup = Dictionary<identifier, value>
-    type FunctionsLookup = Dictionary<identifier, identifier * identifier list * List<identifier> * int * int>
+    type FunctionsLookup = Dictionary<identifier, identifier * identifier list * List<identifier> * instruction[]>
     type StructLookup = Dictionary<identifier, identifier list>
     type State = VarLookup * FunctionsLookup * StructLookup
     type ProgramState = VarLookup * FunctionsLookup * StructLookup * instruction[]
 
     let rec eval (state: ProgramState) (expr: expr) =
-        let (vars: VarLookup, functions: FunctionsLookup, structs: StructLookup, program: instruction[]) =
+        let (vars: VarLookup, functions: FunctionsLookup, structs: StructLookup, _: instruction[]) =
             state
 
         let expr, pos = expr
@@ -71,8 +71,8 @@ module Interpreter =
         | MpLiteral x -> x
         | MpVar identifier ->
             if functions.ContainsKey(identifier) then
-                let s,x, y, z, w = functions[identifier]
-                MpFuncValue(s,x,y,z,w)
+                let s, x, y, z = functions[identifier]
+                MpFuncValue(s, x, y, z)
             else
                 if not (vars.ContainsKey(identifier)) then
                     raise (Exception(error pos "Variable does not exist"))
@@ -112,10 +112,10 @@ module Interpreter =
             let s = eval state s
 
             match s with
-            | MpFuncValue (_,identifiers, globals, start, stop) ->
+            | MpFuncValue (_, identifiers, globals, block) ->
                 let variables = VarLookup()
                 let newFunctions = FunctionsLookup()
-                
+
                 if identifiers.Length <> expr.Length then
                     raise (Exception(error pos "Function does not have correct parameters"))
 
@@ -128,7 +128,8 @@ module Interpreter =
                 for f in functions do
                     newFunctions[f.Key] <- f.Value
 
-                let aux = mpRunAux (ProgramState(variables, newFunctions, structs, program)) start stop
+                let aux =
+                    mpRunAux (ProgramState(variables, newFunctions, structs, block)) 0 block.Length
 
                 for var in globals do
                     vars[var] <- variables[var]
@@ -284,7 +285,7 @@ module Interpreter =
         let loops = Stack<index * index>()
         let evalAux = eval state
 
-        let assign (value: assign) =
+        let assign (value: assign) (vars: VarLookup) =
             match value with
             | Set (identifier, expr) ->
                 let identifier, pos = identifier
@@ -294,57 +295,13 @@ module Interpreter =
                     if functions.ContainsKey(identifier) || structs.ContainsKey(identifier) then
                         raise (Exception(error pos "There are two terms with the same name"))
 
-                    variables[identifier] <- evalAux expr
+                    vars[identifier] <- evalAux expr
                 | MpIdentProp (identifier, indices) ->
-                    let value = variables[identifier]
+                    let value = vars[identifier]
 
                     setIndices state value indices 0 (evalAux expr)
 
                 | _ -> ()
-
-        let initBlock instruction =
-            match instruction with
-            | MpStart -> true
-            | _ -> false
-
-        let endBlock instruction =
-            match instruction with
-            | MpEnd -> true
-            | _ -> false
-
-        let rec findEndBlock (pos: Position) ind cant =
-            if ind >= program.Length then
-                raise (Exception(error pos "Not find end block instruction }"))
-
-            let mutable newCant = cant
-
-            if initBlock program[ind] then
-                newCant <- cant + 1
-
-            if endBlock program[ind] then
-                newCant <- cant - 1
-
-            if newCant = 0 then
-                ind
-            else
-                findEndBlock pos (ind + 1) newCant
-
-        let rec findStartBlock (pos: Position) ind cant =
-            if ind < 1 then
-                raise (Exception(error pos "Not find start block instruction {"))
-
-            let mutable newCant = cant
-
-            if initBlock program[ind] then
-                newCant <- cant - 1
-
-            if endBlock program[ind] then
-                newCant <- cant + 1
-
-            if newCant = 0 then
-                ind
-            else
-                findStartBlock pos (ind - 1) newCant
 
         let sameName pos identifier =
             if
@@ -355,56 +312,43 @@ module Interpreter =
                 raise (Exception(error pos "There are two terms with the same name"))
 
 
-        let step () =
+        let rec step () =
             let instruction = program[pi]
 
             match instruction with
-            | MpAssign set -> assign set
-            | MpIf (cond, posI) ->
+            | MpAssign set -> assign set variables
+            | MpIf (cond, block) ->
                 let _, pos = cond
-                let condition = toBool pos (evalAux cond)
 
-                if not condition then
-                    let index = findEndBlock posI (pi + 1) 0
-                    pi <- index
+                if toBool pos (evalAux cond) then
+                    executeBlock block
 
-            | MpElse pos ->
-                let indexStart = findStartBlock pos (pi - 1) 0
+            | MpElse (cond, blockIf, blockElse) ->
+                let _, pos = cond
 
-                let execute cond posI =
-                    let _, pos = cond
-                    let condition = toBool pos (evalAux cond)
+                if toBool pos (evalAux cond) then
+                    executeBlock blockIf
+                else
+                    executeBlock blockElse
+            | MpElIf (condIf, blockIf, condElIf, blockElIf) ->
+                let _, posIf = condIf
+                let _, posElIf = condElIf
 
-                    if condition then
-                        let index = findEndBlock posI (pi + 1) 0
-                        pi <- index
+                if toBool posIf (evalAux condIf) then
+                    executeBlock blockIf
+                elif toBool posElIf (evalAux condElIf) then
+                    executeBlock blockElIf
+            | MpElIfElse (condIf, blockIf, condElIf, blockElIf, blockElse) ->
+                let _, posIf = condIf
+                let _, posElIf = condElIf
 
-                match program[indexStart - 1] with
-                | MpIf (cond, posI) -> execute cond posI
-                | MpElIf (cond, posI) -> execute cond posI
-                | _ -> raise (Exception("Incorrect instruction else"))
-
-            | MpElIf (condEl, pos) ->
-
-                let indexStart = findStartBlock pos (pi - 1) 0
-
-                let execute condIf posI =
-                    let _, posIf = condIf
-                    let _, posEl = condEl
-
-                    let conditionIf = toBool posIf (evalAux condIf)
-                    let conditionEl = toBool posEl (evalAux condEl)
-
-                    if (conditionIf || not conditionEl) then
-                        let indexEnd = findEndBlock posI (pi + 1) 0
-                        pi <- indexEnd
-
-                match program[indexStart - 1] with
-                | MpIf (condIf, posI) -> execute condIf posI
-                | MpElIf (condIf, posI) -> execute condIf posI
-                | _ -> raise (Exception("Incorrect instruction elif"))
-
-            | MpFor (identifier, initE, stopE, stepE, pos) ->
+                if toBool posIf (evalAux condIf) then
+                    executeBlock blockIf
+                elif toBool posElIf (evalAux condElIf) then
+                    executeBlock blockElIf
+                else
+                    executeBlock blockElse
+            | MpFor (identifier, initE, stopE, stepE, block, pos) ->
                 let toIntAux expr =
                     let value = (evalAux expr)
                     let _, pos = expr
@@ -415,57 +359,25 @@ module Interpreter =
 
                 let _, stop, step = (toIntAux initE, toIntAux stopE, toIntAux stepE)
 
-                let mutable index = 0
+                let _ = assign (Set((MpVar(identifier), pos), initE))
 
-                let execute () =
-                    assign (Set((MpVar(identifier), pos), initE))
-                    index <- findEndBlock pos (pi + 1) 0
-                    loops.Push((pi, index))
+                while toInt pos variables[identifier] < stop do
+                    executeBlock block
+                    variables[identifier] <- arithmetic pos variables[identifier] MpAdd (MpInt step)
 
-                if loops.Count = 0 then
-                    execute ()
-                else
-                    let piAux, indexAux = loops.Peek()
-
-                    if piAux <> pi then
-                        execute ()
-                    else
-                        variables[identifier] <- arithmetic pos variables[identifier] MpAdd (MpInt step)
-                        index <- indexAux
-
-                if toInt pos variables[identifier] >= stop then
-                    let _ = loops.Pop()
-                    pi <- index
-
-            | MpWhile (condition, posI) ->
-                let mutable index = 0
+            | MpWhile (condition, block) ->
                 let _, pos = condition
 
-                let execute () =
-                    index <- findEndBlock posI (pi + 1) 0
-                    loops.Push((pi, index))
 
-                if loops.Count = 0 then
-                    execute ()
-                else
-                    let piAux, indexAux = loops.Peek()
-
-                    if piAux <> pi then execute () else index <- indexAux
-
-                if evalAux condition |> toBool pos |> not then
-                    let _ = loops.Pop()
-                    pi <- index
-
-            | MpStart -> ()
-            | MpEnd -> ()
+                while evalAux condition |> toBool pos do
+                    executeBlock block
             | MpExpr x ->
                 let _ = evalAux x
                 ()
 
-            | MpFunc (identifier, vars, pos) ->
+            | MpFunc (identifier, vars, pos, block) ->
                 let _ = sameName pos identifier
 
-                let index = findEndBlock pos (pi + 1) 0
                 let globals = List<identifier>()
 
                 let contains var =
@@ -483,15 +395,13 @@ module Interpreter =
 
                 let newVars = List.map fst vars
 
-                functions[identifier] <- (identifier, newVars, globals, pi + 1, index + 1)
+                functions[identifier] <- (identifier, newVars, globals, block)
 
                 for i in vars do
                     let i, p = i
 
                     if functions.ContainsKey(i) || structs.ContainsKey(i) then
                         raise (Exception(error p "There are two terms with the same name"))
-
-                pi <- index
 
             | MpReturn expr ->
                 valueReturn <- evalAux expr
@@ -509,6 +419,9 @@ module Interpreter =
                 let _ = sameName pos identifier
 
                 structs[identifier] <- vars
+            | MpComment -> ()
+
+        and executeBlock block = ()
 
         while pi < pe do
             step ()

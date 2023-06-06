@@ -31,7 +31,7 @@ module internal LibraryFunc =
         | MpString x -> x
         | MpChar x -> string x
         | MpNull -> "null"
-        | MpFuncValue (x, y, _, _, _) ->
+        | MpFuncValue (x, y, _, _) ->
             if y.Length = 0 then
                 x + " ()"
             else
