@@ -81,7 +81,7 @@ and instruction =
     | MpElIfElse of expr * instruction[] * expr * instruction[] * instruction[]
     | MpWhile of expr * instruction[]
     | MpReturn of expr
-    | MpBreak of Position
+    | MpBreak of uint8 * Position
     | MpComment
 
 open System
@@ -457,7 +457,7 @@ module Parser =
         pipe5 (str_ws "while") (str_ws "(") mpLogical (str_ws ")") mpBlock (fun _ _ e _ b -> MpWhile(e, b))
 
     let mpFor =
-        pipe5 (str_ws "for") mpIdentifier_ws (str_ws "in") mpRange mpBlock (fun _ s _ (x, y, z) b -> (s, x, y, z, b))
+        pipe5 (str_ws1 "for") mpIdentifier_ws (str_ws1 "in") mpRange mpBlock (fun _ s _ (x, y, z) b -> (s, x, y, z, b))
         |> mpPosition
         |>> (fun ((s, x, y, z, b), p) -> MpFor(s, x, y, z, b, p))
 
@@ -490,17 +490,17 @@ module Parser =
     let mpFuncSimple = (ws >>. str_ws "=>") >>. mpLambdaSimple
 
     let mpFunc =
-        pipe5 getPosition (str_ws "func") mpIdentifier mpFuncVar (attempt mpBlock <|> mpFuncSimple) (fun p _ x y b ->
+        pipe5 getPosition (str_ws1 "func") mpIdentifier mpFuncVar (attempt mpBlock <|> mpFuncSimple) (fun p _ x y b ->
             MpFunc(x, y, p, b))
 
     let mpStructProp =
         between (str_wsl "{") (pstring "}") (sepBy (wsl >>. mpIdentifier .>> wsl) (pchar ','))
 
     let mpStruct =
-        pipe4 getPosition (str_ws "struct") mpIdentifier mpStructProp (fun p _ x y -> MpStruct(x, y, p))
+        pipe4 getPosition (str_ws1 "struct") mpIdentifier mpStructProp (fun p _ x y -> MpStruct(x, y, p))
 
 
-    let mpReturnValue = pipe2 (str_ws "return") mpExpr (fun _ -> MpReturn)
+    let mpReturnValue = pipe2 (str_ws1 "return") mpExpr (fun _ -> MpReturn)
 
     let mpReturnVoid =
         getPosition .>>. pstring "return"
@@ -508,8 +508,13 @@ module Parser =
 
     let mpReturn = attempt mpReturnValue <|> mpReturnVoid
 
-    let mpBreak: Parser<instruction, unit> =
-        getPosition .>>. pstring "break" |>> (fun (x, _) -> MpBreak x)
+    let mpSimpleBreak =
+        getPosition .>>. pstring "break" |>> (fun (x, _) -> MpBreak(uint8 0, x))
+
+    let mpComplexBreak =
+        pipe3 getPosition (str_ws1 "break") puint8 (fun x _ y -> MpBreak(y, x))
+
+    let mpBreak = (attempt mpComplexBreak) <|> mpSimpleBreak
 
     let mpInstruct =
         [ mpAssign; mpExprInstr; mpReturn; mpBreak ] |> List.map attempt |> choice
@@ -526,7 +531,7 @@ module Parser =
     let mpEndInst: Parser<char, unit> = wsl >>. pchar ';'
 
     let mpInstruction =
-        ws >>. ((mpInstruct .>> mpEndInst) <|> mpBlockInstruct <|> mpComment) .>> wsl
+        wsl >>. ((mpInstruct .>> mpEndInst) <|> mpBlockInstruct <|> mpComment) .>> wsl
 
     let mpSimpleBlock =
         (wsl >>. ((mpInstruct .>> mpEndInst) <|> mpBlockInstruct) .>> wsl)

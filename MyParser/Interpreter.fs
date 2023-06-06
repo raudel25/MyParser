@@ -85,7 +85,7 @@ module Interpreter =
 
     type stateFunction =
         | Continue
-        | Break of Position
+        | Break of uint8 * Position
         | Return of value
 
     let rec eval (state: ProgramState) (expr: expr) =
@@ -321,6 +321,7 @@ module Interpreter =
     and mpRunAux (state: ProgramState) =
         let (variables: VarLookup, functions: FunctionsLookup, structs: StructLookup, program: instruction[]) =
             state
+
         let evalAux = eval state
 
         let assign (value: assign) =
@@ -406,13 +407,6 @@ module Interpreter =
 
                 let _ = assign (Set((MpVar(identifier), pos), initE))
 
-                // let mutable q = true
-                //
-                // while toInt pos variables[identifier] < stop && q do
-                //     if executeBlock block true then
-                //         q <- false
-
-
                 let rec loop () =
                     if toInt pos variables[identifier] >= stop then
                         Continue
@@ -423,22 +417,29 @@ module Interpreter =
                             variables[identifier] <- arithmetic pos variables[identifier] MpAdd (MpInt step)
                             loop ()
                         | Return v -> Return v
-                        | Break _ -> Continue
+                        | Break (index, pos) ->
+                            if index = uint8 0 then
+                                Continue
+                            else
+                                Break(index - (uint8 1), pos)
 
                 loop ()
 
             | MpWhile (condition, block) ->
-                let _,pos=condition
-                
+                let _, pos = condition
+
                 let rec loop () =
                     if not (toBool pos (evalAux condition)) then
                         Continue
                     else
                         match executeBlock block with
-                        | Continue ->
-                            loop ()
+                        | Continue -> loop ()
                         | Return v -> Return v
-                        | Break _ -> Continue
+                        | Break (index, pos) ->
+                            if index = uint8 0 then
+                                Continue
+                            else
+                                Break(index - (uint8 1), pos)
 
                 loop ()
 
@@ -458,7 +459,7 @@ module Interpreter =
 
             | MpReturn expr -> Return(evalAux expr)
 
-            | MpBreak pos -> Break pos
+            | MpBreak (index, pos) -> Break(index, pos)
 
             | MpStruct (identifier, vars, pos) ->
                 let _ = sameName pos identifier
@@ -477,7 +478,7 @@ module Interpreter =
                     match step block[i] with
                     | Continue -> loop (i + 1)
                     | Return v -> Return v
-                    | Break pos -> Break pos
+                    | Break (index, pos) -> Break(index, pos)
 
             loop 0
 
@@ -488,7 +489,7 @@ module Interpreter =
                 match step program[i] with
                 | Continue -> loop (i + 1)
                 | Return v -> v
-                | Break pos -> raise (Exception(error pos "Incorrect instruction break"))
+                | Break (_, pos) -> raise (Exception(error pos "Incorrect instruction break"))
 
 
         loop 0
