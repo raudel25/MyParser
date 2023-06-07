@@ -39,7 +39,7 @@ module LibraryFunc =
             if y.Count = 0 then
                 x + "{}"
             else
-                let y =List.map MpString (List.ofSeq y.Keys) |> List.toArray 
+                let y = List.map MpString (List.ofSeq y.Keys) |> List.toArray
                 let s1 = x + " { "
                 let s2 = (aux y) + " }"
                 s1 + s2

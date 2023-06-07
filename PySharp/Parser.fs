@@ -99,7 +99,8 @@ module Parser =
           "false"
           "return"
           "func"
-          "break" ]
+          "break"
+          "struct" ]
 
     let reservedFunctions0 = [ "input" ]
     let reservedFunctions1 = [ "printLn"; "printL"; "int"; "double"; "str"; "char" ]

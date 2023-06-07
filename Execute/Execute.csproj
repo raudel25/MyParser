@@ -5,10 +5,11 @@
         <TargetFramework>net7.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <RootNamespace>Compiler</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\MyParser\MyParser.fsproj" />
+      <ProjectReference Include="..\PySharp\PySharp.fsproj" />
     </ItemGroup>
 
 </Project>

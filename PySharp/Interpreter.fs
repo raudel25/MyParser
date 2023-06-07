@@ -96,6 +96,7 @@ module Interpreter =
 
         match expr with
         | MpLiteral x -> x
+        
         | MpVar identifier ->
             if functions.ContainsKey(identifier) then
                 let s, x, y, z = functions[identifier]
@@ -107,6 +108,7 @@ module Interpreter =
                 variables[identifier]
 
         | MpArrayL a -> MpArrayValue(Array.map (eval state) a)
+        
         | MpArrayD (a, b) ->
             let a = eval state a
             let _, pos = b

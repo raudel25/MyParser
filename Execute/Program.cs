@@ -65,6 +65,7 @@ static class Program
                 Console.WriteLine(e.Message);
                 stateVar.Clear();
                 stateFunc.Clear();
+                stateStruct.Clear();
             }
         }
     }
