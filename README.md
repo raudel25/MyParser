@@ -29,7 +29,7 @@ make
 o
 
 ```bash
-dotnet run --project Compiler
+dotnet run --project Execute
 ```
 
 una vez en la consola interactiva puede escribir su programa. Para ejecutar bloques de código que requieran varias líneas de
