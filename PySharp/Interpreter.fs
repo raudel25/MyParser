@@ -6,7 +6,7 @@ open FParsec
 open Microsoft.FSharp.Core
 open MyParser.LibraryFunc
 
-module Interpreter =
+module internal Interpreter =
 
     let fromObj (pos: Position) (x: obj) =
         match x with
@@ -495,23 +495,3 @@ module Interpreter =
 
 
         loop 0
-
-    let mpState =
-        let variables = VarLookup()
-        let functions = FunctionsLookup()
-        let structs = StructLookup()
-
-        State(variables, functions, structs)
-
-    let mpInteractive (state: State) (program: instruction[]) =
-        let variables, functions, structs = state
-
-        let _ = mpRunAux (ProgramState(variables, functions, structs, program))
-        ()
-
-    let mpRun (program: instruction[]) =
-        let variables = VarLookup()
-        let functions = FunctionsLookup()
-        let structs = StructLookup()
-
-        mpRunAux (ProgramState(variables, functions, structs, program))

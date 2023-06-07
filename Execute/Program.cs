@@ -22,9 +22,9 @@ static class Program
 
         try
         {
-            var program = Parser.mpParse(programSrc);
+            var program = PySharp.mpParse(programSrc);
 
-            Interpreter.mpRun(program);
+            PySharp.mpRun(program);
         }
         catch (Exception e)
         {
@@ -36,7 +36,7 @@ static class Program
 
     static void Interactive()
     {
-        var (stateVar, stateFunc, stateStruct) = Interpreter.mpState;
+        var (stateVar, stateFunc, stateStruct) = PySharp.mpState;
 
         while (true)
         {
@@ -50,15 +50,15 @@ static class Program
 
             if (instr != null && stateVar.ContainsKey(instr))
             {
-                Console.WriteLine(LibraryFunc.toStr(stateVar[instr]));
+                Console.WriteLine(PySharp.mpToStr(stateVar[instr]));
                 continue;
             }
 
             try
             {
-                var program = Parser.mpParse(instr);
+                var program = PySharp.mpParse(instr);
 
-                Interpreter.mpInteractive(stateVar, stateFunc, stateStruct, program);
+                PySharp.mpInteractive(stateVar, stateFunc, stateStruct, program);
             }
             catch (Exception e)
             {

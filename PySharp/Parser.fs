@@ -86,7 +86,7 @@ and instruction =
 
 open System
 
-module Parser =
+module internal Parser =
 
     let reservedWords =
         [ "for"
@@ -549,8 +549,3 @@ module Parser =
         |> mpPosition
 
     let mpLines = many mpInstruction .>> eof
-
-    let mpParse (program: string) =
-        match run mpLines program with
-        | Success (result, _, _) -> result |> List.toArray
-        | Failure (errorMsg, _, _) -> failwith errorMsg

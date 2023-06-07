@@ -10,6 +10,7 @@
         <Compile Include="Parser.fs" />
         <Compile Include="LibraryFunc.fs" />
         <Compile Include="Interpreter.fs" />
+        <Compile Include="PySharp.fs" />
     </ItemGroup>
 
     <ItemGroup>
