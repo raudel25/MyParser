@@ -102,6 +102,7 @@ and instruction =
     | MpBreak of uint8 * Position
     | MpComment
     | MpImpl of identifier * instructionImpl list * Position
+    | MpImplDeriving of identifier * Position * identifier * Position * instructionImpl list 
 
 and instructionImpl =
     | MpImplFunc of identifier * (identifier * Position) list * Position * instruction[]

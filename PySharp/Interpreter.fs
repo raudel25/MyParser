@@ -83,6 +83,28 @@ module internal Interpreter =
         let _ = List.map f vars
         ()
 
+    let impl variables classes (functions: FunctionsImpl) l inst =
+        let func identifier vars pos block staticOrSelf =
+            if functions.ContainsKey(identifier) || List.contains identifier l then
+                raise (Exception(error pos "There are two terms with the same name"))
+
+            let globals = globalFunVars variables vars
+            let newVars = List.map fst vars
+
+            functions[identifier] <-
+                if staticOrSelf then
+                    Static(identifier, newVars, globals, block)
+                else
+                    Self(identifier, newVars, globals, block)
+
+            checkImplVars vars functions classes
+
+        match inst with
+        | MpImplFunc (s, vars, pos, block) -> func s vars pos block true
+
+        | MpImplSelf (s, vars, pos, block) -> func s vars pos block false
+
+
 
     type stateFunction =
         | Continue
@@ -502,29 +524,40 @@ module internal Interpreter =
                     raise (Exception(error pos "Class does not exist"))
 
                 let l, functions = classes[s]
+                
+                if functions.Count <> 0 then
+                    raise(Exception(error pos "There are two implementations for the same class"))
 
-                let rec impl inst =
-                    let func identifier vars pos block staticOrSelf =
-                        if functions.ContainsKey(identifier) || List.contains identifier l then
-                            raise (Exception(error pos "There are two terms with the same name"))
+                let _ = List.map (impl variables classes functions l) block
 
-                        let globals = globalFunVars variables vars
-                        let newVars = List.map fst vars
+                Continue
+            | MpImplDeriving (s1, p1, s2, p2, block) ->
+                if not (classes.ContainsKey(s1)) then
+                    raise (Exception(error p1 "Class does not exist"))
 
-                        functions[identifier] <-
-                            if staticOrSelf then
-                                Static(identifier, newVars, globals, block)
-                            else
-                                Self(identifier, newVars, globals, block)
+                if not (classes.ContainsKey(s2)) then
+                    raise (Exception(error p2 "Class does not exist"))
 
-                        checkImplVars vars functions classes
+                let l1, functions1 = classes[s1]
+                let l2, functions2 = classes[s2]
+                
+                if functions.Count <> 0 then
+                    raise(Exception(error p1 "There are two implementations for the same class"))
 
-                    match inst with
-                    | MpImplFunc (s, vars, pos, block) -> func s vars pos block true
+                let checkProps x =
+                    if List.contains x l1 then
+                        raise (Exception(error p1 "There are two properties with the same name"))
+                   
+                let _ = List.map (impl variables classes functions1 l1) block
+                
+                let checkFunc x =
+                    if not (functions1.ContainsKey(x)) then
+                        functions1[x] <- functions2[x]
 
-                    | MpImplSelf (s, vars, pos, block) -> func s vars pos block false
-
-                let _ = List.map impl block
+                let _ = List.map checkProps l2
+                let _ = List.map checkFunc (List.ofSeq functions2.Keys)
+                
+                classes[s1]<-(List.append l1 l2,functions1)
 
                 Continue
 

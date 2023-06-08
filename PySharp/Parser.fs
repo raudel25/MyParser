@@ -458,6 +458,23 @@ module internal Parser =
     let mpImpl =
         pipe4 (str_ws1 "impl") getPosition mpIdentifier mpFuncBlock (fun _ p x b -> MpImpl(x, b, p))
 
+    let mpDeriving =
+        pipe4
+            (str_ws1 "impl")
+            (getPosition .>>. mpIdentifier_ws)
+            (str_ws1 "of")
+            (getPosition .>>. mpIdentifier_ws)
+            (fun _ x _ y -> (x, y))
+
+    let mpImplDerivingS =
+        mpDeriving
+        |>> (fun ((xp, x), (yp, y)) -> MpImplDeriving(x, xp, y, yp, List.empty))
+
+    let mpImplDerivingB =
+        pipe2 mpDeriving mpFuncBlock (fun ((xp, x), (yp, y)) b -> MpImplDeriving(x, xp, y, yp, b))
+        
+    let mpImplDeriving=attempt mpImplDerivingB <|> mpImplDerivingS
+
     let mpReturnValue = pipe2 (str_ws1 "return") mpExpr (fun _ -> MpReturn)
 
     let mpReturnVoid =
@@ -486,6 +503,7 @@ module internal Parser =
           mpIfI
           mpFunc
           mpClass
+          mpImplDeriving
           mpImpl ]
         |> List.map attempt
         |> choice
