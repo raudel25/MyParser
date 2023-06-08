@@ -26,7 +26,7 @@ module internal LibraryFunc =
         | MpString x -> x
         | MpChar x -> string x
         | MpNull -> "null"
-        | MpFuncValue (x, y, _, _) ->
+        | MpFuncStaticValue (x, y, _, _) ->
             if y.Length = 0 then
                 $"{x} ()"
             else
@@ -35,7 +35,7 @@ module internal LibraryFunc =
 
         | MpArrayValue x -> $"[ {aux x} ]"
         | MpTupleValue x -> $"( {aux x} )"
-        | MpStructValue (x, y) ->
+        | MpClassValue (x, y,_) ->
             if y.Count = 0 then
                 x + "{}"
             else

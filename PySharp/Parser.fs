@@ -1,10 +1,11 @@
 ﻿namespace MyParser
 
 open FParsec
+open System.Collections.Generic
 
 type identifier = string
 type index = int
-type HashTable<'k, 'v> = System.Collections.Generic.Dictionary<'k, 'v>
+type HashTable<'k, 'v> = Dictionary<'k, 'v>
 
 type arithmetic =
     | MpAdd
@@ -29,7 +30,18 @@ type logical =
     | MpOr
     | MpXor
 
-type value =
+and VarLookup = Dictionary<identifier, value>
+
+and funcType =
+    | Static of identifier * identifier list * identifier list * instruction[]
+    | Self of identifier * identifier list * identifier list * instruction[]
+
+and FunctionsLookup = Dictionary<identifier, funcType>
+and ClassLookup = Dictionary<identifier, identifier list * FunctionsLookup>
+and State = VarLookup * FunctionsLookup * ClassLookup
+and ProgramState = VarLookup * FunctionsLookup * ClassLookup * instruction[]
+
+and value =
     | MpNull
     | MpBool of bool
     | MpInt of int
@@ -38,8 +50,9 @@ type value =
     | MpChar of char
     | MpTupleValue of value[]
     | MpArrayValue of value[]
-    | MpFuncValue of identifier * identifier list * identifier list * instruction[]
-    | MpStructValue of identifier * HashTable<identifier, value>
+    | MpFuncStaticValue of identifier * identifier list * identifier list * instruction[]
+    | MpFuncSelfValue of identifier * identifier list * identifier list * instruction[] * value
+    | MpClassValue of identifier * HashTable<identifier, value> * FunctionsLookup
 
 and exprT =
     | MpIdentProp of identifier * property list
@@ -57,8 +70,9 @@ and exprT =
     | MpReservedFunc0 of identifier
     | MpReservedFunc1 of identifier * expr
     | MpTernary of expr * expr * expr
-    | MpStructConst of identifier * expr list
+    | MpClassConst of identifier * expr list
     | MpLambda of (identifier * Position) list * instruction[]
+    | MpSelf
 
 and expr = exprT * Position
 
@@ -70,7 +84,7 @@ and property =
 and assign = Set of expr * expr
 
 and instruction =
-    | MpStruct of identifier * identifier list * Position
+    | MpClass of identifier * identifier list * Position
     | MpFunc of identifier * (identifier * Position) list * Position * instruction[]
     | MpAssign of assign
     | MpExpr of expr
@@ -83,6 +97,10 @@ and instruction =
     | MpReturn of expr
     | MpBreak of uint8 * Position
     | MpComment
+    | MpImpl of identifier * instructionImpl[] * Position    
+and instructionImpl=
+    | MpImplFunc of identifier * (identifier * Position) list * Position * instruction[]
+    | MpImplSelf of identifier * (identifier * Position) list * Position * instruction[]    
 
 open System
 
@@ -100,7 +118,9 @@ module internal Parser =
           "return"
           "func"
           "break"
-          "struct" ]
+          "class"
+          "self"
+          "impl" ]
 
     let reservedFunctions0 = [ "input" ]
     let reservedFunctions1 = [ "printLn"; "printL"; "int"; "double"; "str"; "char" ]
@@ -209,7 +229,7 @@ module internal Parser =
 
     let mpTuple, mpTupleR = createParserForwardedToRef ()
 
-    let mpStructConst, mpStructConstR = createParserForwardedToRef ()
+    let mpClassConst, mpClassConstR = createParserForwardedToRef ()
 
     let mpIdentProp, mpIdentPropR = createParserForwardedToRef ()
 
@@ -296,26 +316,33 @@ module internal Parser =
         |>> (fun (x, y) -> y, x)
         |>> MpIndexT
 
+    let mpSelf = pstring "self"
+
+    let mpSelfExpr = mpSelf |>> (fun _ -> MpSelf) |> mpPosition
+
     let mpProperty =
         getPosition .>>. ((pchar '.') .>>. mpIdentifier |>> snd)
         |>> (fun (x, y) -> y, x)
         |>> MpProperty
 
     mpIdentPropR.Value <-
-        pipe2 mpIdentifier (many1 (attempt mpIndexA <|> attempt mpIndexT <|> attempt mpProperty)) (fun x y ->
-            MpIdentProp(x, y))
+        pipe2
+            (attempt mpSelf <|> mpIdentifier)
+            (many1 (attempt mpIndexA <|> attempt mpIndexT <|> attempt mpProperty))
+            (fun x y -> MpIdentProp(x, y))
         |> mpPosition
 
     let mpExpr =
         [ mpLambda
-          mpStructConst
+          mpClassConst
           mpTernary
           mpSlice
           mpLogical
           mpComparison
           mpArithmetic
           mpArray
-          mpTuple ]
+          mpTuple
+          mpSelfExpr ]
         |> List.map attempt
         |> choice
 
@@ -350,10 +377,10 @@ module internal Parser =
         pipe4 mpSetGet (str_ws "[") mpSliceInd (pstring "]") (fun s _ (x, y) _ -> MpSlice(s, x, y))
         |> mpPosition
 
-    let mpStructExpr =
+    let mpClassExpr =
         between (str_wsl "{") (pstring "}") (sepBy (ws >>. mpExpr .>> ws) (pchar ','))
 
-    mpStructConstR.Value <- mpIdentifier .>>. mpStructExpr |>> MpStructConst |> mpPosition
+    mpClassConstR.Value <- mpIdentifier .>>. mpClassExpr |>> MpClassConst |> mpPosition
 
     let mpInvokeVar =
         between (str_ws "(") (pstring ")") (sepBy (ws >>. mpExpr .>> ws) (pchar ','))
@@ -486,20 +513,49 @@ module internal Parser =
             (pstring ")")
             (sepBy ((ws >>. getPosition .>>. mpIdentifier .>> ws) |>> (fun (x, y) -> (y, x))) (pchar ','))
 
+    let mpFuncVarSelfC =
+        pipe4
+            (str_ws "(")
+            (mpSelf .>>. ws .>>. str_ws ",")
+            (sepBy ((ws >>. getPosition .>>. mpIdentifier .>> ws) |>> (fun (x, y) -> (y, x))) (pchar ','))
+            (pstring ")")
+            (fun _ _ x _ -> x)
+
+    let mpFuncVarSelfS =
+        (between (str_ws "(") (pstring ")") (mpSelf .>>. ws)) |>> (fun _ -> [])
+
+    let mpFuncVarSelf = (attempt mpFuncVarSelfC) <|> mpFuncVarSelfS
+
     let mpLambdaSimple = mpExpr |>> MpReturn |>> (fun x -> List.toArray [ x ])
 
     let mpFuncSimple = (ws >>. str_ws "=>") >>. mpLambdaSimple
 
     let mpFunc =
         pipe5 getPosition (str_ws1 "func") mpIdentifier mpFuncVar (attempt mpBlock <|> mpFuncSimple) (fun p _ x y b ->
-            MpFunc(x, y, p, b))
+            MpFunc(x, y, p, b))    
+    let mpImplFunc =
+        pipe5 getPosition (str_ws1 "func") mpIdentifier mpFuncVar (attempt mpBlock <|> mpFuncSimple) (fun p _ x y b ->
+            MpImplFunc(x, y, p, b))
 
-    let mpStructProp =
+    let mpImplSelf =
+        pipe5
+            getPosition
+            (str_ws1 "func")
+            mpIdentifier
+            mpFuncVarSelf
+            (attempt mpBlock <|> mpFuncSimple)
+            (fun p _ x y b -> MpImplSelf(x, y, p, b))
+
+    let mpClassProp =
         between (str_wsl "{") (pstring "}") (sepBy (wsl >>. mpIdentifier .>> wsl) (pchar ','))
 
-    let mpStruct =
-        pipe4 getPosition (str_ws1 "struct") mpIdentifier mpStructProp (fun p _ x y -> MpStruct(x, y, p))
+    let mpClass =
+        pipe4 getPosition (str_ws1 "class") mpIdentifier mpClassProp (fun p _ x y -> MpClass(x, y, p))
 
+    let mpFuncBlock = between (wsl >>. str_wsl "{") (str_wsl "}") (many1 (attempt mpImplFunc<|>mpImplSelf)) |>> List.toArray
+
+    let mpImpl =
+        pipe4 (str_ws1 "impl") getPosition mpIdentifier mpFuncBlock (fun _ p x b -> MpImpl(x, b, p))
 
     let mpReturnValue = pipe2 (str_ws1 "return") mpExpr (fun _ -> MpReturn)
 
@@ -521,7 +577,15 @@ module internal Parser =
         [ mpAssign; mpExprInstr; mpReturn; mpBreak ] |> List.map attempt |> choice
 
     let mpBlockInstruct =
-        [ mpWhile; mpFor; mpElIfElseI; mpElIfI; mpElseI; mpIfI; mpFunc; mpStruct ]
+        [ mpWhile
+          mpFor
+          mpElIfElseI
+          mpElIfI
+          mpElseI
+          mpIfI
+          mpFunc
+          mpClass
+          mpImpl ]
         |> List.map attempt
         |> choice
 

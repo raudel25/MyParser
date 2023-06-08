@@ -14,7 +14,7 @@ module PySharp =
     let mpState =
         let variables = VarLookup()
         let functions = FunctionsLookup()
-        let structs = StructLookup()
+        let structs = ClassLookup()
 
         State(variables, functions, structs)
 
@@ -27,7 +27,7 @@ module PySharp =
     let mpRun (program: instruction[]) =
         let variables = VarLookup()
         let functions = FunctionsLookup()
-        let structs = StructLookup()
+        let structs = ClassLookup()
 
         mpRunAux (ProgramState(variables, functions, structs, program))
         
