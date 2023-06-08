@@ -1,4 +1,4 @@
-namespace MyParser
+namespace PySharp
 
 open System.Collections.Generic
 open FParsec

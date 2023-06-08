@@ -1,8 +1,8 @@
-namespace MyParser
+namespace PySharp
 
-open MyParser.Parser
-open MyParser.Interpreter
-open MyParser.LibraryFunc
+open PySharp.Parser
+open PySharp.Interpreter
+open PySharp.LibraryFunc
 open FParsec
 
 module PySharp =

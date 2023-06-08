@@ -1,4 +1,4 @@
-﻿namespace MyParser
+﻿namespace PySharp
 
 open FParsec
 open System
@@ -19,7 +19,8 @@ module internal Parser =
           "break"
           "class"
           "self"
-          "impl" ]
+          "impl"
+          "of" ]
 
     let reservedFunctions0 = [ "input" ]
     let reservedFunctions1 = [ "printLn"; "printL"; "int"; "double"; "str"; "char" ]

@@ -1,4 +1,4 @@
-namespace MyParser
+namespace PySharp
 
 open System
 open Microsoft.FSharp.Core

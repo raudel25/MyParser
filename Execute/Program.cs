@@ -1,6 +1,6 @@
 ﻿namespace Compiler;
 
-using MyParser;
+using PySharp;
 
 static class Program
 {

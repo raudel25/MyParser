@@ -1,10 +1,10 @@
-namespace MyParser
+namespace PySharp
 
 open System
 open System.Collections.Generic
 open FParsec
 open Microsoft.FSharp.Core
-open MyParser.LibraryFunc
+open PySharp.LibraryFunc
 
 module internal Interpreter =
 

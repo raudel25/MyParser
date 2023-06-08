@@ -143,16 +143,51 @@ q = q[0:2];
 l = ( x , y ) => x + y;
 ```
 
-### Structs 
+### Clases 
 
-Para definir tipos personalizados se pueden usar los structs, los cuales permiten crear una estructura con varias propiedades.
+El lenguaje soporta la programación orientada a objetos ya que cuenta con **clases** y **herencia**. Las clases se pueden definir de la siguiente manera.
 
 ```
-struct point{ x , y }
+class point{ x , y }
 
-p = point{ 1 + 2 , 2 };
+impl point{
+    func sum( p1 , p2 ) => point{ p1.x + p2.x , p1.y + p2.y }
 
-printLn(p.x);
+    func setX( self , v )
+    {
+        self.x = v;
+    }
+}
+
+p1 = point{ 1 + 2 , 2 };
+p2 = point{ 0 , 1 };
+sum = point.sum( p1 , p2 );
+
+printLn(sum.x);
+
+p2.setX( 1 );
+
+printLn(p2.x);
+```
+
+La **herencia** se puede definir de la siguiente manera.
+
+```
+class rectangle{ x , y }
+
+impl rectangle {
+    func perimeter( self ) => 2 * (self.x + self.y)
+} 
+
+class square{}
+
+impl square of rectangle {
+    func new( l ) => square{ l , l }
+}
+
+s = square.new( 2 );
+
+printLn( s.perimeter());
 ```
 
 ### Funciones Predefinidas
