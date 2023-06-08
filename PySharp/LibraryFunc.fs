@@ -20,11 +20,19 @@ module internal LibraryFunc =
 
         let funcToStr x (y:identifier list) =
             if y.Length = 0 then
-                $"{x} ()"
+                $"func {x} ()"
             else
                 let y = List.map MpString y |> List.toArray
-                $"{x} ( {aux y} )"
-
+                $"func {x} ( {aux y} )"
+        let classObject x (y:identifier list) t=
+            if y.Length = 0 then
+                $"{t} {x}" + "{}"
+            else
+                let y = List.map MpString y |> List.toArray
+                let s1 = $"{t} {x}" + " { "
+                let s2 = (aux y) + " }"
+                s1 + s2
+                
         match value with
         | MpInt x -> string x
         | MpDouble x -> string x
@@ -37,14 +45,9 @@ module internal LibraryFunc =
         | MpFuncSelfValue (x, y, _, _, _) -> funcToStr x y
         | MpArrayValue x -> $"[ {aux x} ]"
         | MpTupleValue x -> $"( {aux x} )"
-        | MpClassValue (x, y, _) ->
-            if y.Count = 0 then
-                x + "{}"
-            else
-                let y = List.map MpString (List.ofSeq y.Keys) |> List.toArray
-                let s1 = x + " { "
-                let s2 = (aux y) + " }"
-                s1 + s2
+        | MpObjectValue (x, y, _) -> classObject x (List.ofSeq y.Keys) "object"
+        | MpClassValue (x, y, _) -> classObject x y "class"
+            
 
     let toChar pos value =
         match value with

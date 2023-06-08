@@ -32,12 +32,12 @@ type logical =
 and VarLookup = Dictionary<identifier, value>
 
 and implType =
-    | Static of identifier * identifier list * identifier list * instruction[]
-    | Self of identifier * identifier list * identifier list * instruction[]
+    | Static of identifier list * identifier list * instruction[]
+    | Self of identifier list * identifier list * instruction[]
 
 and FunctionsImpl=Dictionary<identifier,implType>
 
-and FunctionsLookup = Dictionary<identifier, identifier * identifier list * identifier list * instruction[]>
+and FunctionsLookup = Dictionary<identifier, identifier list * identifier list * instruction[]>
 
 and ClassLookup = Dictionary<identifier, identifier list * FunctionsImpl>
 
@@ -56,7 +56,8 @@ and value =
     | MpArrayValue of value[]
     | MpFuncStaticValue of identifier * identifier list * identifier list * instruction[]
     | MpFuncSelfValue of identifier * identifier list * identifier list * instruction[] * value
-    | MpClassValue of identifier * Dictionary<identifier, value> * FunctionsImpl
+    | MpObjectValue of identifier * Dictionary<identifier, value> * FunctionsImpl
+    | MpClassValue of identifier * identifier list * FunctionsImpl
 
 and exprT =
     | MpIdentProp of identifier * property list
@@ -74,7 +75,7 @@ and exprT =
     | MpReservedFunc0 of identifier
     | MpReservedFunc1 of identifier * expr
     | MpTernary of expr * expr * expr
-    | MpClassConst of identifier * expr list
+    | MpClassConst of expr * expr list
     | MpLambda of (identifier * Position) list * instruction[]
     | MpSelf
 

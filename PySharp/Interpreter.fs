@@ -93,9 +93,9 @@ module internal Interpreter =
 
             functions[identifier] <-
                 if staticOrSelf then
-                    Static(identifier, newVars, globals, block)
+                    Static(newVars, globals, block)
                 else
-                    Self(identifier, newVars, globals, block)
+                    Self(newVars, globals, block)
 
             checkImplVars vars functions classes
 
@@ -122,12 +122,15 @@ module internal Interpreter =
 
         | MpVar identifier ->
             if functions.ContainsKey(identifier) then
-                MpFuncStaticValue(functions[identifier])
-            else
-                if not (variables.ContainsKey(identifier)) then
-                    raise (Exception(error pos "Variable does not exist"))
-
+                let l, g, b = functions[identifier]
+                MpFuncStaticValue(identifier, l, g, b)
+            elif classes.ContainsKey(identifier) then
+                let l, f = classes[identifier]
+                MpClassValue(identifier, l, f)
+            elif variables.ContainsKey(identifier) then
                 variables[identifier]
+            else
+                raise (Exception(error pos "Variable does not exist"))
 
         | MpArrayL a -> MpArrayValue(Array.map (eval state) a)
 
@@ -143,12 +146,17 @@ module internal Interpreter =
         | MpTuple a -> MpTupleValue(Array.map (eval state) a)
 
         | MpIdentProp (identifier, indices) ->
-            if not (variables.ContainsKey(identifier)) then
+            if classes.ContainsKey(identifier) then
+                let l, f = classes[identifier]
+                let value = MpClassValue(identifier, l, f)
+
+                getProp state value indices 0
+            elif variables.ContainsKey(identifier) then
+                let value = variables[identifier]
+
+                getProp state value indices 0
+            else
                 raise (Exception(error pos "Variable does not exist"))
-
-            let value = variables[identifier]
-
-            getProp state value indices 0
 
         | MpSlice (identifier, start, stop) ->
             let value = eval state identifier
@@ -218,21 +226,22 @@ module internal Interpreter =
 
             if (toBool pos cond) then eval state e1 else eval state e2
 
-        | MpClassConst (s, props) ->
-            if not (classes.ContainsKey(s)) then
-                raise (Exception(error pos "Class does not exist"))
+        | MpClassConst (expr, props) ->
+            let _, pos = expr
+            let value = eval state expr
 
-            let listProps, dictFunc = classes[s]
+            match value with
+            | MpClassValue (s, listProps, dictFunc) ->
+                if listProps.Length <> props.Length then
+                    raise (Exception(error pos "Class does not have correct parameters"))
 
-            if listProps.Length <> props.Length then
-                raise (Exception(error pos "Class does not have correct parameters"))
+                let q = Dictionary<identifier, value>()
 
-            let q = Dictionary<identifier, value>()
+                let _ =
+                    List.map (fun i -> q[listProps[i]] <- (eval state props[i])) [ 0 .. listProps.Length - 1 ]
 
-            let _ =
-                List.map (fun i -> q[listProps[i]] <- (eval state props[i])) [ 0 .. listProps.Length - 1 ]
-
-            MpClassValue(s, q, dictFunc)
+                MpObjectValue(s, q, dictFunc)
+            | _ -> raise (Exception(error pos "Expression is not class"))
 
         | MpLambda (vars, block) ->
             let newVars = List.map fst vars
@@ -322,16 +331,29 @@ module internal Interpreter =
 
         | MpProperty (prop, pos) ->
             match value with
-            | MpClassValue (_, v, f) ->
+            | MpObjectValue (_, v, f) ->
                 if f.ContainsKey(prop) && ind = indices.Length - 1 then
                     match f[prop] with
-                    | Static (s, v, g, b) -> MpFuncStaticValue(s, v, g, b)
-                    | Self (s, v, g, b) -> MpFuncSelfValue(s, v, g, b, value)
+                    | Static (v, g, b) ->
+                        let value = MpFuncStaticValue(prop, v, g, b)
+                        getValue value
+                    | Self (v, g, b) ->
+                        let value = MpFuncSelfValue(prop, v, g, b, value)
+                        getValue value
                 else
                     if not (v.ContainsKey(prop)) then
                         raise (Exception(error pos "The property is not correct"))
 
                     getValue v[prop]
+            | MpClassValue (_, _, f) ->
+                if f.ContainsKey(prop) then
+                    match f[prop] with
+                    | Static (v, g, b) ->
+                        let value = MpFuncStaticValue(prop, v, g, b)
+                        getValue value
+                    | _ -> raise (Exception(error pos "The property is not correct"))
+                else
+                    raise (Exception(error pos "The property is not correct"))
             | _ -> raise (Exception(error pos "The property is not correct"))
 
     and setProp (state: ProgramState) (value: value) (indices: property list) ind (e: value) =
@@ -357,7 +379,7 @@ module internal Interpreter =
 
         | MpProperty (prop, pos) ->
             match value with
-            | MpClassValue (_, v, _) ->
+            | MpObjectValue (_, v, _) ->
                 if not (v.ContainsKey(prop)) then
                     raise (Exception(error pos "The property is not correct"))
 
@@ -501,7 +523,7 @@ module internal Interpreter =
 
                 let globals = globalFunVars variables vars
                 let newVars = List.map fst vars
-                functions[identifier] <- (identifier, newVars, globals, block)
+                functions[identifier] <- (newVars, globals, block)
                 checkFuncVars vars functions classes
 
                 Continue
@@ -524,9 +546,9 @@ module internal Interpreter =
                     raise (Exception(error pos "Class does not exist"))
 
                 let l, functions = classes[s]
-                
+
                 if functions.Count <> 0 then
-                    raise(Exception(error pos "There are two implementations for the same class"))
+                    raise (Exception(error pos "There are two implementations for the same class"))
 
                 let _ = List.map (impl variables classes functions l) block
 
@@ -540,24 +562,24 @@ module internal Interpreter =
 
                 let l1, functions1 = classes[s1]
                 let l2, functions2 = classes[s2]
-                
+
                 if functions.Count <> 0 then
-                    raise(Exception(error p1 "There are two implementations for the same class"))
+                    raise (Exception(error p1 "There are two implementations for the same class"))
 
                 let checkProps x =
                     if List.contains x l1 then
                         raise (Exception(error p1 "There are two properties with the same name"))
-                   
+
                 let _ = List.map (impl variables classes functions1 l1) block
-                
+
                 let checkFunc x =
                     if not (functions1.ContainsKey(x)) then
                         functions1[x] <- functions2[x]
 
                 let _ = List.map checkProps l2
                 let _ = List.map checkFunc (List.ofSeq functions2.Keys)
-                
-                classes[s1]<-(List.append l1 l2,functions1)
+
+                classes[s1] <- (List.append l1 l2, functions1)
 
                 Continue
 

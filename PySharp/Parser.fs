@@ -279,7 +279,7 @@ module internal Parser =
     let mpClassExpr =
         between (str_wsl "{") (pstring "}") (sepBy (ws >>. mpExpr .>> ws) (pchar ','))
 
-    mpClassConstR.Value <- mpIdentifier .>>. mpClassExpr |>> MpClassConst |> mpPosition
+    mpClassConstR.Value <- mpSetGet .>>. mpClassExpr |>> MpClassConst |> mpPosition
 
     let mpInvokeVar =
         between (str_ws "(") (pstring ")") (sepBy (ws >>. mpExpr .>> ws) (pchar ','))
