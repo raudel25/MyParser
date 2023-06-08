@@ -41,8 +41,8 @@ module internal LibraryFunc =
         | MpString x -> x
         | MpChar x -> string x
         | MpNull -> "null"
-        | MpFuncStaticValue (x, y, _, _) -> funcToStr x y
-        | MpFuncSelfValue (x, y, _, _, _) -> funcToStr x y
+        | MpFuncStaticValue (x, (y, _, _)) -> funcToStr x y
+        | MpFuncSelfValue (x, (y, _, _), _) -> funcToStr x y
         | MpArrayValue x -> $"[ {aux x} ]"
         | MpTupleValue x -> $"( {aux x} )"
         | MpObjectValue (x, y, _) -> classObject x (List.ofSeq y.Keys) "object"

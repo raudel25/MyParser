@@ -384,9 +384,8 @@ module internal Parser =
         pipe5 (str_ws "while") (str_ws "(") mpLogical (str_ws ")") mpBlock (fun _ _ e _ b -> MpWhile(e, b))
 
     let mpFor =
-        pipe5 (str_ws1 "for") mpIdentifier_ws (str_ws1 "in") mpRange mpBlock (fun _ s _ (x, y, z) b -> (s, x, y, z, b))
-        |> mpPosition
-        |>> (fun ((s, x, y, z, b), p) -> MpFor(s, x, y, z, b, p))
+        pipe5 (str_ws1 "for") (mpIdentifier_ws |> mpPosition) (str_ws1 "in") mpRange mpBlock (fun _ s _ (x, y, z) b ->
+            MpFor(s, x, y, z, b))
 
     let mpIf =
         pipe5 (str_ws "if") (str_ws "(") mpLogical (str_ws ")") mpBlock (fun _ _ e _ b -> (e, b))
@@ -407,16 +406,13 @@ module internal Parser =
         pipe3 mpIf mpElIf mpElse (fun (e1, b1) (e2, b2) b3 -> MpElIfElse(e1, b1, e2, b2, b3))
 
     let mpFuncVar =
-        between
-            (str_ws "(")
-            (pstring ")")
-            (sepBy ((ws >>. getPosition .>>. mpIdentifier .>> ws) |>> (fun (x, y) -> (y, x))) (pchar ','))
+        between (str_ws "(") (pstring ")") (sepBy (ws >>. (mpIdentifier |> mpPosition) .>> ws) (pchar ','))
 
     let mpFuncVarSelfC =
         pipe4
             (str_ws "(")
             (mpSelf .>>. ws .>>. str_ws ",")
-            (sepBy ((ws >>. getPosition .>>. mpIdentifier .>> ws) |>> (fun (x, y) -> (y, x))) (pchar ','))
+            (sepBy (ws >>. (mpIdentifier |> mpPosition) .>> ws) (pchar ','))
             (pstring ")")
             (fun _ _ x _ -> x)
 
@@ -427,53 +423,59 @@ module internal Parser =
 
     let mpLambdaSimple = mpExpr |>> MpReturn |>> (fun x -> List.toArray [ x ])
 
-    let mpFuncSimple = (ws >>. str_ws "=>") >>. mpLambdaSimple
+    let mpFuncSimple = (ws >>. str_ws "=>") >>. mpLambdaSimple .>> wsl
 
     let mpFunc =
-        pipe5 getPosition (str_ws1 "func") mpIdentifier mpFuncVar (attempt mpBlock <|> mpFuncSimple) (fun p _ x y b ->
-            MpFunc(x, y, p, b))
+        pipe4
+            (str_ws1 "func")
+            (mpIdentifier |> mpPosition)
+            mpFuncVar
+            (attempt mpBlock <|> mpFuncSimple)
+            (fun _ x y b -> MpFunc(x, y, b))
 
     let mpImplFunc =
-        pipe5 getPosition (str_ws1 "func") mpIdentifier mpFuncVar (attempt mpBlock <|> mpFuncSimple) (fun p _ x y b ->
-            MpImplFunc(x, y, p, b))
+        pipe4
+            (str_ws1 "func")
+            (mpIdentifier |> mpPosition)
+            mpFuncVar
+            (attempt mpBlock <|> mpFuncSimple)
+            (fun _ x y b -> MpImplFunc(x, y, b))
 
     let mpImplSelf =
-        pipe5
-            getPosition
+        pipe4
             (str_ws1 "func")
-            mpIdentifier
+            (mpIdentifier |> mpPosition)
             mpFuncVarSelf
             (attempt mpBlock <|> mpFuncSimple)
-            (fun p _ x y b -> MpImplSelf(x, y, p, b))
+            (fun _ x y b -> MpImplSelf(x, y, b))
 
     let mpClassProp =
         between (str_wsl "{") (pstring "}") (sepBy (wsl >>. mpIdentifier .>> wsl) (pchar ','))
 
     let mpClass =
-        pipe4 getPosition (str_ws1 "class") mpIdentifier mpClassProp (fun p _ x y -> MpClass(x, y, p))
+        pipe3 (str_ws1 "class") (mpIdentifier |> mpPosition) mpClassProp (fun _ x y -> MpClass(x, y))
 
     let mpFuncBlock =
         between (wsl >>. str_wsl "{") (str_wsl "}") (many1 (attempt mpImplFunc <|> mpImplSelf))
 
     let mpImpl =
-        pipe4 (str_ws1 "impl") getPosition mpIdentifier mpFuncBlock (fun _ p x b -> MpImpl(x, b, p))
+        pipe3 (str_ws1 "impl") (mpIdentifier |> mpPosition) mpFuncBlock (fun _ x b -> MpImpl(x, b))
 
     let mpDeriving =
         pipe4
             (str_ws1 "impl")
-            (getPosition .>>. mpIdentifier_ws)
+            (mpIdentifier_ws |> mpPosition)
             (str_ws1 "of")
-            (getPosition .>>. mpIdentifier_ws)
+            (mpIdentifier_ws |> mpPosition)
             (fun _ x _ y -> (x, y))
 
     let mpImplDerivingS =
-        mpDeriving
-        |>> (fun ((xp, x), (yp, y)) -> MpImplDeriving(x, xp, y, yp, List.empty))
+        mpDeriving |>> (fun (x, y) -> MpImplDeriving(x, y, List.empty))
 
     let mpImplDerivingB =
-        pipe2 mpDeriving mpFuncBlock (fun ((xp, x), (yp, y)) b -> MpImplDeriving(x, xp, y, yp, b))
-        
-    let mpImplDeriving=attempt mpImplDerivingB <|> mpImplDerivingS
+        pipe2 mpDeriving mpFuncBlock (fun (x, y) b -> MpImplDeriving(x, y, b))
+
+    let mpImplDeriving = attempt mpImplDerivingB <|> mpImplDerivingS
 
     let mpReturnValue = pipe2 (str_ws1 "return") mpExpr (fun _ -> MpReturn)
 

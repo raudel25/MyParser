@@ -29,15 +29,17 @@ type logical =
     | MpOr
     | MpXor
 
+and func = identifier list * identifier list * instruction[]
+
 and VarLookup = Dictionary<identifier, value>
 
 and implType =
-    | Static of identifier list * identifier list * instruction[]
-    | Self of identifier list * identifier list * instruction[]
+    | Static of func
+    | Self of func
 
-and FunctionsImpl=Dictionary<identifier,implType>
+and FunctionsImpl = Dictionary<identifier, implType>
 
-and FunctionsLookup = Dictionary<identifier, identifier list * identifier list * instruction[]>
+and FunctionsLookup = Dictionary<identifier, func>
 
 and ClassLookup = Dictionary<identifier, identifier list * FunctionsImpl>
 
@@ -54,8 +56,8 @@ and value =
     | MpChar of char
     | MpTupleValue of value[]
     | MpArrayValue of value[]
-    | MpFuncStaticValue of identifier * identifier list * identifier list * instruction[]
-    | MpFuncSelfValue of identifier * identifier list * identifier list * instruction[] * value
+    | MpFuncStaticValue of identifier * func
+    | MpFuncSelfValue of identifier * func * value
     | MpObjectValue of identifier * Dictionary<identifier, value> * FunctionsImpl
     | MpClassValue of identifier * identifier list * FunctionsImpl
 
@@ -76,24 +78,26 @@ and exprT =
     | MpReservedFunc1 of identifier * expr
     | MpTernary of expr * expr * expr
     | MpClassConst of expr * expr list
-    | MpLambda of (identifier * Position) list * instruction[]
+    | MpLambda of identPos list * instruction[]
     | MpSelf
 
 and expr = exprT * Position
 
+and identPos = identifier * Position
+
 and property =
     | MpIndexA of expr
-    | MpProperty of identifier * Position
+    | MpProperty of identPos
     | MpIndexT of int * Position
 
 and assign = Set of expr * expr
 
 and instruction =
-    | MpClass of identifier * identifier list * Position
-    | MpFunc of identifier * (identifier * Position) list * Position * instruction[]
+    | MpClass of identPos * identifier list
+    | MpFunc of identPos * identPos list * instruction[]
     | MpAssign of assign
     | MpExpr of expr
-    | MpFor of identifier * expr * expr * expr * instruction[] * Position
+    | MpFor of identPos * expr * expr * expr * instruction[]
     | MpIf of expr * instruction[]
     | MpElIf of expr * instruction[] * expr * instruction[]
     | MpElse of expr * instruction[] * instruction[]
@@ -102,12 +106,9 @@ and instruction =
     | MpReturn of expr
     | MpBreak of uint8 * Position
     | MpComment
-    | MpImpl of identifier * instructionImpl list * Position
-    | MpImplDeriving of identifier * Position * identifier * Position * instructionImpl list 
+    | MpImpl of identPos * instructionImpl list
+    | MpImplDeriving of identPos * identPos * instructionImpl list
 
 and instructionImpl =
-    | MpImplFunc of identifier * (identifier * Position) list * Position * instruction[]
-    | MpImplSelf of identifier * (identifier * Position) list * Position * instruction[]
-
-
-
+    | MpImplFunc of identPos * identPos list * instruction[]
+    | MpImplSelf of identPos * identPos list * instruction[]

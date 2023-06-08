@@ -66,7 +66,6 @@ module internal Interpreter =
 
         (f variables)
 
-
     let checkFuncVars vars (functions: FunctionsLookup) (classes: ClassLookup) =
         let f (i, p) =
             if functions.ContainsKey(i) || classes.ContainsKey(i) then
@@ -100,11 +99,9 @@ module internal Interpreter =
             checkImplVars vars functions classes
 
         match inst with
-        | MpImplFunc (s, vars, pos, block) -> func s vars pos block true
+        | MpImplFunc ((s, pos), vars, block) -> func s vars pos block true
 
-        | MpImplSelf (s, vars, pos, block) -> func s vars pos block false
-
-
+        | MpImplSelf ((s, pos), vars, block) -> func s vars pos block false
 
     type stateFunction =
         | Continue
@@ -123,7 +120,7 @@ module internal Interpreter =
         | MpVar identifier ->
             if functions.ContainsKey(identifier) then
                 let l, g, b = functions[identifier]
-                MpFuncStaticValue(identifier, l, g, b)
+                MpFuncStaticValue(identifier, (l, g, b))
             elif classes.ContainsKey(identifier) then
                 let l, f = classes[identifier]
                 MpClassValue(identifier, l, f)
@@ -196,7 +193,7 @@ module internal Interpreter =
                 (vars, newFunctions)
 
             match s with
-            | MpFuncStaticValue (_, identifiers, globals, block) ->
+            | MpFuncStaticValue (_, (identifiers, globals, block)) ->
                 let vars, newFunctions = functionParams identifiers globals
 
                 let aux = mpRunAux (ProgramState(vars, newFunctions, classes, block))
@@ -204,7 +201,7 @@ module internal Interpreter =
                 let _ = List.map (fun var -> variables[var] <- vars[var]) globals
 
                 aux
-            | MpFuncSelfValue (_, identifiers, globals, block, v) ->
+            | MpFuncSelfValue (_, (identifiers, globals, block), v) ->
                 let vars, newFunctions = functionParams identifiers globals
                 vars["self"] <- v
 
@@ -247,7 +244,7 @@ module internal Interpreter =
             let newVars = List.map fst vars
             checkFuncVars vars functions classes
             let globals = globalFunVars variables vars
-            MpFuncStaticValue("lambda", newVars, globals, block)
+            MpFuncStaticValue("lambda", (newVars, globals, block))
 
         | MpSelf ->
             if not (variables.ContainsKey("self")) then
@@ -335,10 +332,10 @@ module internal Interpreter =
                 if f.ContainsKey(prop) && ind = indices.Length - 1 then
                     match f[prop] with
                     | Static (v, g, b) ->
-                        let value = MpFuncStaticValue(prop, v, g, b)
+                        let value = MpFuncStaticValue(prop, (v, g, b))
                         getValue value
                     | Self (v, g, b) ->
-                        let value = MpFuncSelfValue(prop, v, g, b, value)
+                        let value = MpFuncSelfValue(prop, (v, g, b), value)
                         getValue value
                 else
                     if not (v.ContainsKey(prop)) then
@@ -349,7 +346,7 @@ module internal Interpreter =
                 if f.ContainsKey(prop) then
                     match f[prop] with
                     | Static (v, g, b) ->
-                        let value = MpFuncStaticValue(prop, v, g, b)
+                        let value = MpFuncStaticValue(prop, (v, g, b))
                         getValue value
                     | _ -> raise (Exception(error pos "The property is not correct"))
                 else
@@ -465,7 +462,7 @@ module internal Interpreter =
                 else
                     executeBlock blockElse
 
-            | MpFor (identifier, initE, stopE, stepE, block, pos) ->
+            | MpFor ((identifier, pos), initE, stopE, stepE, block) ->
                 let toIntAux expr =
                     let value = (evalAux expr)
                     let _, pos = expr
@@ -518,7 +515,7 @@ module internal Interpreter =
                 let _ = evalAux x
                 Continue
 
-            | MpFunc (identifier, vars, pos, block) ->
+            | MpFunc ((identifier, pos), vars, block) ->
                 let _ = sameName pos identifier
 
                 let globals = globalFunVars variables vars
@@ -532,7 +529,7 @@ module internal Interpreter =
 
             | MpBreak (index, pos) -> Break(index, pos)
 
-            | MpClass (identifier, vars, pos) ->
+            | MpClass ((identifier, pos), vars) ->
                 let _ = sameName pos identifier
 
                 classes[identifier] <- vars, FunctionsImpl()
@@ -541,7 +538,7 @@ module internal Interpreter =
 
             | MpComment -> Continue
 
-            | MpImpl (s, block, pos) ->
+            | MpImpl ((s, pos), block) ->
                 if not (classes.ContainsKey(s)) then
                     raise (Exception(error pos "Class does not exist"))
 
@@ -553,7 +550,8 @@ module internal Interpreter =
                 let _ = List.map (impl variables classes functions l) block
 
                 Continue
-            | MpImplDeriving (s1, p1, s2, p2, block) ->
+
+            | MpImplDeriving ((s1, p1), (s2, p2), block) ->
                 if not (classes.ContainsKey(s1)) then
                     raise (Exception(error p1 "Class does not exist"))
 
@@ -603,6 +601,5 @@ module internal Interpreter =
                 | Continue -> loop (i + 1)
                 | Return v -> v
                 | Break (_, pos) -> raise (Exception(error pos "Incorrect instruction break"))
-
 
         loop 0
