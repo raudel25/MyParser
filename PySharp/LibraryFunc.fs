@@ -18,6 +18,13 @@ module internal LibraryFunc =
 
             if x.Length = 0 then "" else f 0
 
+        let funcToStr x (y:identifier list) =
+            if y.Length = 0 then
+                $"{x} ()"
+            else
+                let y = List.map MpString y |> List.toArray
+                $"{x} ( {aux y} )"
+
         match value with
         | MpInt x -> string x
         | MpDouble x -> string x
@@ -26,16 +33,11 @@ module internal LibraryFunc =
         | MpString x -> x
         | MpChar x -> string x
         | MpNull -> "null"
-        | MpFuncStaticValue (x, y, _, _) ->
-            if y.Length = 0 then
-                $"{x} ()"
-            else
-                let y = List.map MpString y |> List.toArray
-                $"{x} ( {aux y} )"
-
+        | MpFuncStaticValue (x, y, _, _) -> funcToStr x y
+        | MpFuncSelfValue (x, y, _, _, _) -> funcToStr x y
         | MpArrayValue x -> $"[ {aux x} ]"
         | MpTupleValue x -> $"( {aux x} )"
-        | MpClassValue (x, y,_) ->
+        | MpClassValue (x, y, _) ->
             if y.Count = 0 then
                 x + "{}"
             else

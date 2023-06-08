@@ -1,6 +1,7 @@
 namespace MyParser
 
 open System
+open System.Collections.Generic
 open FParsec
 open Microsoft.FSharp.Core
 open MyParser.LibraryFunc
@@ -16,8 +17,6 @@ module internal Interpreter =
         | :? char as x -> MpChar x
         | null -> MpNull
         | x -> raise (Exception(error pos (x.ToString())))
-
-
 
     let toInt (pos: Position) =
         let f x =
@@ -76,6 +75,15 @@ module internal Interpreter =
         let _ = List.map f vars
         ()
 
+    let checkImplVars vars (functions: FunctionsImpl) (classes: ClassLookup) =
+        let f (i, p) =
+            if functions.ContainsKey(i) || classes.ContainsKey(i) then
+                raise (Exception(error p "There are two terms with the same name"))
+
+        let _ = List.map f vars
+        ()
+
+
     type stateFunction =
         | Continue
         | Break of uint8 * Position
@@ -92,9 +100,7 @@ module internal Interpreter =
 
         | MpVar identifier ->
             if functions.ContainsKey(identifier) then
-                match functions[identifier] with
-                | Static (s, x, y, z) -> MpFuncStaticValue(s, x, y, z)
-                | _ -> raise (Exception(error pos "Incorrect function self"))
+                MpFuncStaticValue(functions[identifier])
             else
                 if not (variables.ContainsKey(identifier)) then
                     raise (Exception(error pos "Variable does not exist"))
@@ -199,7 +205,7 @@ module internal Interpreter =
             if listProps.Length <> props.Length then
                 raise (Exception(error pos "Class does not have correct parameters"))
 
-            let q = HashTable<identifier, value>()
+            let q = Dictionary<identifier, value>()
 
             let _ =
                 List.map (fun i -> q[listProps[i]] <- (eval state props[i])) [ 0 .. listProps.Length - 1 ]
@@ -473,7 +479,7 @@ module internal Interpreter =
 
                 let globals = globalFunVars variables vars
                 let newVars = List.map fst vars
-                functions[identifier] <- Static(identifier, newVars, globals, block)
+                functions[identifier] <- (identifier, newVars, globals, block)
                 checkFuncVars vars functions classes
 
                 Continue
@@ -485,7 +491,7 @@ module internal Interpreter =
             | MpClass (identifier, vars, pos) ->
                 let _ = sameName pos identifier
 
-                classes[identifier] <- vars, FunctionsLookup()
+                classes[identifier] <- vars, FunctionsImpl()
 
                 Continue
 
@@ -497,7 +503,7 @@ module internal Interpreter =
 
                 let l, functions = classes[s]
 
-                let rec loop i =
+                let rec impl inst =
                     let func identifier vars pos block staticOrSelf =
                         if functions.ContainsKey(identifier) || List.contains identifier l then
                             raise (Exception(error pos "There are two terms with the same name"))
@@ -511,20 +517,14 @@ module internal Interpreter =
                             else
                                 Self(identifier, newVars, globals, block)
 
-                        checkFuncVars vars functions classes
+                        checkImplVars vars functions classes
 
-                    if i = block.Length then
-                        ()
-                    else
-                        match block[i] with
-                        | MpImplFunc (s, vars, pos, block) ->
-                            func s vars pos block true
-                            loop (i + 1)
-                        | MpImplSelf (s, vars, pos, block) ->
-                            func s vars pos block false
-                            loop (i + 1)
-                        
-                loop 0
+                    match inst with
+                    | MpImplFunc (s, vars, pos, block) -> func s vars pos block true
+
+                    | MpImplSelf (s, vars, pos, block) -> func s vars pos block false
+
+                let _ = List.map impl block
 
                 Continue
 
