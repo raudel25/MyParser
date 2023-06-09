@@ -35,3 +35,6 @@ dotnet run --project Execute
 una vez en la consola interactiva puede escribir su programa. Para ejecutar bloques de código que requieran varias líneas de
 código puede usar el comando `init` y para finalizar un bloque `end`. Para finalizar el programa puede usar los comandos
 `q`, `exit` o `quit`.
+
+## Lenguaje
+Los detalles del lenguaje los puede encontrar en la <a href="https://github.com/raudel25/PySharp/wiki/Lenguaje">wiki</a> del repositorio.
