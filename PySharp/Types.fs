@@ -105,6 +105,7 @@ and instruction =
     | MpWhile of expr * instruction[]
     | MpReturn of expr
     | MpBreak of uint8 * Position
+    | MpContinue of uint8 * Position
     | MpComment
     | MpImpl of identPos * instructionImpl list
     | MpImplDeriving of identPos * identPos * instructionImpl list

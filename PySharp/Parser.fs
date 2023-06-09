@@ -20,7 +20,9 @@ module internal Parser =
           "class"
           "self"
           "impl"
-          "of" ]
+          "of"
+          "in"
+          "continue" ]
 
     let reservedFunctions0 = [ "input" ]
     let reservedFunctions1 = [ "printLn"; "printL"; "int"; "double"; "str"; "char" ]
@@ -494,8 +496,18 @@ module internal Parser =
 
     let mpBreak = (attempt mpComplexBreak) <|> mpSimpleBreak
 
+    let mpSimpleContinue: Parser<instruction, unit> =
+        getPosition .>>. pstring "continue" |>> (fun (x, _) -> MpContinue(uint8 0, x))
+
+    let mpComplexContinue =
+        pipe3 getPosition (str_ws1 "continue") puint8 (fun x _ y -> MpContinue(y, x))
+
+    let mpContinue = (attempt mpComplexContinue) <|> mpSimpleContinue
+
     let mpInstruct =
-        [ mpAssign; mpExprInstr; mpReturn; mpBreak ] |> List.map attempt |> choice
+        [ mpAssign; mpExprInstr; mpReturn; mpBreak; mpContinue ]
+        |> List.map attempt
+        |> choice
 
     let mpBlockInstruct =
         [ mpWhile

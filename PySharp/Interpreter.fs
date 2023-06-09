@@ -104,8 +104,9 @@ module internal Interpreter =
         | MpImplSelf ((s, pos), vars, block) -> func s vars pos block false
 
     type stateFunction =
-        | Continue
+        | Execute
         | Break of uint8 * Position
+        | Continue of uint8 * Position
         | Return of value
 
     let rec eval (state: ProgramState) (expr: expr) =
@@ -422,7 +423,7 @@ module internal Interpreter =
             match instruction with
             | MpAssign set ->
                 assign set
-                Continue
+                Execute
 
             | MpIf (cond, block) ->
                 let _, pos = cond
@@ -430,7 +431,7 @@ module internal Interpreter =
                 if toBool pos (evalAux cond) then
                     executeBlock block
                 else
-                    Continue
+                    Execute
 
             | MpElse (cond, blockIf, blockElse) ->
                 let _, pos = cond
@@ -449,7 +450,7 @@ module internal Interpreter =
                 elif toBool posElIf (evalAux condElIf) then
                     executeBlock blockElIf
                 else
-                    Continue
+                    Execute
 
             | MpElIfElse (condIf, blockIf, condElIf, blockElIf, blockElse) ->
                 let _, posIf = condIf
@@ -477,19 +478,26 @@ module internal Interpreter =
 
                 let rec loop () =
                     if toInt pos variables[identifier] >= stop then
-                        Continue
+                        Execute
                     else
 
                         match executeBlock block with
-                        | Continue ->
+                        | Execute ->
                             variables[identifier] <- arithmetic pos variables[identifier] MpAdd (MpInt step)
                             loop ()
                         | Return v -> Return v
                         | Break (index, pos) ->
                             if index = uint8 0 then
-                                Continue
+                                Execute
                             else
                                 Break(index - (uint8 1), pos)
+                        | Continue (index, pos) ->
+                            if index = uint8 0 then
+                                variables[identifier] <- arithmetic pos variables[identifier] MpAdd (MpInt step)
+                                loop ()
+                            else
+                                Continue(index - (uint8 1), pos)
+
 
                 loop ()
 
@@ -498,22 +506,28 @@ module internal Interpreter =
 
                 let rec loop () =
                     if not (toBool pos (evalAux condition)) then
-                        Continue
+                        Execute
                     else
                         match executeBlock block with
-                        | Continue -> loop ()
+                        | Execute -> loop ()
                         | Return v -> Return v
                         | Break (index, pos) ->
                             if index = uint8 0 then
-                                Continue
+                                Execute
                             else
                                 Break(index - (uint8 1), pos)
+                        | Continue (index, pos) ->
+                            if index = uint8 0 then
+                                loop ()
+                            else
+                                Continue(index - (uint8 1), pos)
+
 
                 loop ()
 
             | MpExpr x ->
                 let _ = evalAux x
-                Continue
+                Execute
 
             | MpFunc ((identifier, pos), vars, block) ->
                 let _ = sameName pos identifier
@@ -523,20 +537,22 @@ module internal Interpreter =
                 functions[identifier] <- (newVars, globals, block)
                 checkFuncVars vars functions classes
 
-                Continue
+                Execute
 
             | MpReturn expr -> Return(evalAux expr)
 
             | MpBreak (index, pos) -> Break(index, pos)
+            
+            | MpContinue (index, pos) -> Continue(index, pos)
 
             | MpClass ((identifier, pos), vars) ->
                 let _ = sameName pos identifier
 
                 classes[identifier] <- vars, FunctionsImpl()
 
-                Continue
+                Execute
 
-            | MpComment -> Continue
+            | MpComment -> Execute
 
             | MpImpl ((s, pos), block) ->
                 if not (classes.ContainsKey(s)) then
@@ -549,7 +565,7 @@ module internal Interpreter =
 
                 let _ = List.map (impl variables classes functions l) block
 
-                Continue
+                Execute
 
             | MpImplDeriving ((s1, p1), (s2, p2), block) ->
                 if not (classes.ContainsKey(s1)) then
@@ -579,17 +595,18 @@ module internal Interpreter =
 
                 classes[s1] <- (List.append l1 l2, functions1)
 
-                Continue
+                Execute
 
         and executeBlock block =
             let rec loop i =
                 if i = block.Length then
-                    Continue
+                    Execute
                 else
                     match step block[i] with
-                    | Continue -> loop (i + 1)
+                    | Execute -> loop (i + 1)
                     | Return v -> Return v
                     | Break (index, pos) -> Break(index, pos)
+                    | Continue (index, pos) -> Continue(index, pos)
 
             loop 0
 
@@ -598,8 +615,9 @@ module internal Interpreter =
                 MpNull
             else
                 match step program[i] with
-                | Continue -> loop (i + 1)
+                | Execute -> loop (i + 1)
                 | Return v -> v
                 | Break (_, pos) -> raise (Exception(error pos "Incorrect instruction break"))
+                | Continue (_, pos) -> raise (Exception(error pos "Incorrect instruction continue"))
 
         loop 0
