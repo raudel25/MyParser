@@ -4,7 +4,6 @@ open System.Collections.Generic
 open FParsec
 
 type identifier = string
-type index = int
 
 type arithmetic =
     | MpAdd
@@ -29,19 +28,17 @@ type logical =
     | MpOr
     | MpXor
 
-and func = identifier list * identifier list * instruction[]
-
 and VarLookup = Dictionary<identifier, value>
 
-and implType =
-    | Static of func
-    | Self of func
-
-and FunctionsImpl = Dictionary<identifier, implType>
+and func =
+    | Static of identifier list * identifier list * instruction[]
+    | Self of identifier list * identifier list * instruction[]
 
 and FunctionsLookup = Dictionary<identifier, func>
 
-and ClassLookup = Dictionary<identifier, identifier list * FunctionsImpl>
+and ClassLookup = Dictionary<identifier, identifier list * Scope>
+
+and Scope = VarLookup * FunctionsLookup
 
 and State = VarLookup * FunctionsLookup * ClassLookup
 
@@ -56,10 +53,10 @@ and value =
     | MpChar of char
     | MpTupleValue of value[]
     | MpArrayValue of value[]
-    | MpFuncStaticValue of identifier * func
-    | MpFuncSelfValue of identifier * func * value
-    | MpObjectValue of identifier * Dictionary<identifier, value> * FunctionsImpl
-    | MpClassValue of identifier * identifier list * FunctionsImpl
+    | MpFuncStaticValue of identifier * identifier list * identifier list * instruction[] * Scope
+    | MpFuncSelfValue of identifier * identifier list * identifier list * instruction[] * Scope * value
+    | MpObjectValue of identifier * Dictionary<identifier, value> * Scope
+    | MpClassValue of identifier * identifier list * Scope
 
 and exprT =
     | MpIdentProp of identifier * property list
@@ -94,7 +91,8 @@ and assign = Set of expr * expr
 
 and instruction =
     | MpClass of identPos * identifier list
-    | MpFunc of identPos * identPos list * instruction[]
+    | MpFuncStatic of identPos * identPos list * instruction[]
+    | MpFuncSelf of identPos * identPos list * instruction[]
     | MpAssign of assign
     | MpExpr of expr
     | MpFor of identPos * expr * expr * expr * instruction[]
@@ -107,9 +105,5 @@ and instruction =
     | MpBreak of uint8 * Position
     | MpContinue of uint8 * Position
     | MpComment
-    | MpImpl of identPos * instructionImpl list
-    | MpImplDeriving of identPos * identPos * instructionImpl list
-
-and instructionImpl =
-    | MpImplFunc of identPos * identPos list * instruction[]
-    | MpImplSelf of identPos * identPos list * instruction[]
+    | MpImpl of identPos * instruction[]
+    | MpImplDeriving of identPos * identPos * instruction[]

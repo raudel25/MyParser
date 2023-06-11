@@ -428,29 +428,21 @@ module internal Parser =
 
     let mpFuncSimple = (ws >>. str_ws "=>") >>. mpLambdaSimple .>> wsl
 
-    let mpFunc =
+    let mpFuncStatic =
         pipe4
             (str_ws1 "func")
             (mpIdentifier |> mpPosition)
             mpFuncVar
             (attempt mpBlock <|> mpFuncSimple)
-            (fun _ x y b -> MpFunc(x, y, b))
+            (fun _ x y b -> MpFuncStatic(x, y, b))
 
-    let mpImplFunc =
-        pipe4
-            (str_ws1 "func")
-            (mpIdentifier |> mpPosition)
-            mpFuncVar
-            (attempt mpBlock <|> mpFuncSimple)
-            (fun _ x y b -> MpImplFunc(x, y, b))
-
-    let mpImplSelf =
+    let mpFuncSelf =
         pipe4
             (str_ws1 "func")
             (mpIdentifier |> mpPosition)
             mpFuncVarSelf
             (attempt mpBlock <|> mpFuncSimple)
-            (fun _ x y b -> MpImplSelf(x, y, b))
+            (fun _ x y b -> MpFuncSelf(x, y, b))
 
     let mpClassProp =
         between (str_wsl "{") (pstring "}") (sepBy (wsl >>. mpIdentifier .>> wsl) (pchar ','))
@@ -458,11 +450,8 @@ module internal Parser =
     let mpClass =
         pipe3 (str_ws1 "class") (mpIdentifier |> mpPosition) mpClassProp (fun _ x y -> MpClass(x, y))
 
-    let mpFuncBlock =
-        between (wsl >>. str_wsl "{") (str_wsl "}") (many1 (attempt mpImplFunc <|> mpImplSelf))
-
     let mpImpl =
-        pipe3 (str_ws1 "impl") (mpIdentifier |> mpPosition) mpFuncBlock (fun _ x b -> MpImpl(x, b))
+        pipe3 (str_ws1 "impl") (mpIdentifier |> mpPosition) mpBlock (fun _ x b -> MpImpl(x, b))
 
     let mpDeriving =
         pipe4
@@ -473,10 +462,10 @@ module internal Parser =
             (fun _ x _ y -> (x, y))
 
     let mpImplDerivingS =
-        mpDeriving |>> (fun (x, y) -> MpImplDeriving(x, y, List.empty))
+        mpDeriving |>> (fun (x, y) -> MpImplDeriving(x, y, Array.empty))
 
     let mpImplDerivingB =
-        pipe2 mpDeriving mpFuncBlock (fun (x, y) b -> MpImplDeriving(x, y, b))
+        pipe2 mpDeriving mpBlock (fun (x, y) b -> MpImplDeriving(x, y, b))
 
     let mpImplDeriving = attempt mpImplDerivingB <|> mpImplDerivingS
 
@@ -516,7 +505,8 @@ module internal Parser =
           mpElIfI
           mpElseI
           mpIfI
-          mpFunc
+          mpFuncStatic
+          mpFuncSelf
           mpClass
           mpImplDeriving
           mpImpl ]
