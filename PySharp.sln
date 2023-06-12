@@ -2,7 +2,7 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "PySharp", "PySharp\PySharp.fsproj", "{BA89E98E-D5CC-4790-8C93-A9E3BB2DBA81}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Execute", "Execute\Execute.csproj", "{5FA71E04-3C84-45AD-BC4F-484245872269}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Compiler", "Compiler\Compiler.csproj", "{5FA71E04-3C84-45AD-BC4F-484245872269}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

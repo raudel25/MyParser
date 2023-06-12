@@ -10,7 +10,7 @@ module PySharp =
         match run mpLines program with
         | Success (result, _, _) -> result |> List.toArray
         | Failure (errorMsg, _, _) -> failwith errorMsg
-    
+
     let mpState =
         let variables = VarLookup()
         let functions = FunctionsLookup()
@@ -30,6 +30,5 @@ module PySharp =
         let structs = ClassLookup()
 
         mpRunAux (ProgramState(variables, functions, structs, program))
-        
-    let mpToStr value= toStr value
 
+    let mpToStr value = toStr value

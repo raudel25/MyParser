@@ -17,7 +17,7 @@ make file=<file>
 donde `<file>` es la ruta del archivo que contiene el código a ejecutar. Otra forma de ejecutar el proyecto es la siguiente si no tiene **make** instalado en su sistema:
 
 ```bash
-dotnet run --project Execute <file>
+dotnet run --project Compiler <file>
 ```
 
 también cuenta con una consola interactiva a la cual se puede acceder mediante el comando:
@@ -29,7 +29,7 @@ make
 o
 
 ```bash
-dotnet run --project Execute
+dotnet run --project Compiler
 ```
 
 una vez en la consola interactiva puede escribir su programa. Para ejecutar bloques de código que requieran varias líneas de

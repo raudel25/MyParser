@@ -1,6 +1,6 @@
 .PHONY: dev
 dev:
-	dotnet run --project Execute $(file)
+	dotnet run --project Compiler $(file)
 
 .PHONY: build
 build:

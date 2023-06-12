@@ -23,7 +23,10 @@ module internal Parser =
           "of"
           "in"
           "continue"
-          "loop" ]
+          "loop"
+          "and"
+          "or"
+          "xor" ]
 
     let reservedFunctions0 = [ "input" ]
     let reservedFunctions1 = [ "printLn"; "printL"; "int"; "double"; "str"; "char" ]
@@ -208,9 +211,9 @@ module internal Parser =
     let termL = (mpComparison .>> ws) <|> between (str_ws "(") (str_ws ")") mpLogical
 
     oppL.TermParser <- termL
-    oppL.AddOperator(InfixOperator("&&", ws, 1, Assoc.Left, (fun (x, p) y -> MpLogical((x, p), MpAnd, y), p)))
-    oppL.AddOperator(InfixOperator("||", ws, 1, Assoc.Left, (fun (x, p) y -> MpLogical((x, p), MpOr, y), p)))
-    oppL.AddOperator(InfixOperator("^^", ws, 1, Assoc.Left, (fun (x, p) y -> MpLogical((x, p), MpXor, y), p)))
+    oppL.AddOperator(InfixOperator("and", ws, 1, Assoc.Left, (fun (x, p) y -> MpLogical((x, p), MpAnd, y), p)))
+    oppL.AddOperator(InfixOperator("or", ws, 1, Assoc.Left, (fun (x, p) y -> MpLogical((x, p), MpOr, y), p)))
+    oppL.AddOperator(InfixOperator("xor", ws, 1, Assoc.Left, (fun (x, p) y -> MpLogical((x, p), MpXor, y), p)))
 
     let mpIndexA = between (str_ws "[") (ws >>. pstring "]") mpArithmetic |>> MpIndexA
 
@@ -340,15 +343,15 @@ module internal Parser =
             MpAssign(Set((id, p), (MpArithmetic((id, p), MpArithmeticXor, e), p))))
 
     let mpAssignAnd =
-        pipe3 mpSetGet (ws >>. (str_ws "&&") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+        pipe3 mpSetGet (ws >>. (str_ws "and") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
             MpAssign(Set((id, p), (MpLogical((id, p), MpAnd, e), p))))
 
     let mpAssignOr =
-        pipe3 mpSetGet (ws >>. (str_ws "||") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+        pipe3 mpSetGet (ws >>. (str_ws "or") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
             MpAssign(Set((id, p), (MpLogical((id, p), MpOr, e), p))))
 
     let mpAssignXor =
-        pipe3 mpSetGet (ws >>. (str_ws "^^") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
+        pipe3 mpSetGet (ws >>. (str_ws "xor") .>>. (str_ws "=")) mpExpr (fun (id, p) _ e ->
             MpAssign(Set((id, p), (MpLogical((id, p), MpXor, e), p))))
 
     let mpAssignV =
