@@ -96,6 +96,7 @@ and instruction =
     | MpAssign of assign
     | MpExpr of expr
     | MpFor of identPos * expr * expr * expr * instruction[]
+    | MpLoop of instruction[]
     | MpIf of expr * instruction[]
     | MpElIf of expr * instruction[] * expr * instruction[]
     | MpElse of expr * instruction[] * instruction[]

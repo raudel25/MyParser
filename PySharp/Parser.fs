@@ -22,7 +22,8 @@ module internal Parser =
           "impl"
           "of"
           "in"
-          "continue" ]
+          "continue"
+          "loop" ]
 
     let reservedFunctions0 = [ "input" ]
     let reservedFunctions1 = [ "printLn"; "printL"; "int"; "double"; "str"; "char" ]
@@ -383,6 +384,9 @@ module internal Parser =
 
     let mpRange = attempt mpRange3 <|> attempt mpRange2 <|> attempt mpRange1
 
+    let mpLoop =
+        pipe2 (str_ws "loop") mpBlock (fun _ -> MpLoop)
+
     let mpWhile =
         pipe5 (str_ws "while") (str_ws "(") mpLogical (str_ws ")") mpBlock (fun _ _ e _ b -> MpWhile(e, b))
 
@@ -499,7 +503,8 @@ module internal Parser =
         |> choice
 
     let mpBlockInstruct =
-        [ mpWhile
+        [ mpLoop
+          mpWhile
           mpFor
           mpElIfElseI
           mpElIfI
