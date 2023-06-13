@@ -106,7 +106,12 @@ module internal LibraryFunc =
             | _ -> raise (Exception())
         with _ ->
             raise (Exception(error pos "Cannot convert to double"))
-
+            
+    let size pos value=
+        match value with
+        | MpArrayValue x->MpInt x.Length
+        | MpString x->MpInt x.Length
+        | _-> raise(Exception(error pos "The object do not have size property"))
 
     let funcLib0 s =
         match s with
@@ -121,4 +126,5 @@ module internal LibraryFunc =
         | "double" -> toDouble pos value
         | "str" -> MpString(toStr value)
         | "char" -> toChar pos value
+        | "size"-> size pos value
         | _ -> MpNull

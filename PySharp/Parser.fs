@@ -29,7 +29,7 @@ module internal Parser =
           "xor" ]
 
     let reservedFunctions0 = [ "input" ]
-    let reservedFunctions1 = [ "printLn"; "printL"; "int"; "double"; "str"; "char" ]
+    let reservedFunctions1 = [ "printLn"; "printL"; "int"; "double"; "str"; "char" ; "size" ]
 
     let (>>%) p x = p |>> (fun _ -> x)
 
