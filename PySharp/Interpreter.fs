@@ -649,14 +649,14 @@ module internal Interpreter =
 
                 let newClasses = ClassLookup()
                 let newModules = Dictionary<identifier, Scope>()
-
                 let _ = List.map (fun x -> newClasses[x] <- classes[x]) (List.ofSeq classes.Keys)
-                let _ = List.map (fun s -> newModules[s] <- modules[s]) (List.ofSeq modules.Keys)
+                let _ = List.map (fun x -> newModules[x] <- modules[x]) (List.ofSeq modules.Keys)
 
                 if functions.Count <> 0 then
                     raise (Exception(error pos "There are two implementations for the same class"))
 
-                let _ = mpRunAux (files, (variables, functions, classes, Module newModules), block)
+                let _ =
+                    mpRunAux (files, (variables, functions, newClasses, Module newModules), block)
 
                 Execute
 
@@ -672,9 +672,10 @@ module internal Interpreter =
 
                 let newClasses = ClassLookup()
                 let newModules = Dictionary<identifier, Scope>()
-
                 let _ = List.map (fun x -> newClasses[x] <- classes[x]) (List.ofSeq classes.Keys)
-                let _ = List.map (fun s -> newModules[s] <- modules[s]) (List.ofSeq modules.Keys)
+                let _ = List.map (fun x -> newModules[x] <- modules[x]) (List.ofSeq modules.Keys)
+
+                let _ = List.map (fun x -> v1[x] <- v2[x]) (List.ofSeq v2.Keys)
 
                 if functions.Count <> 0 then
                     raise (Exception(error p1 "There are two implementations for the same class"))
@@ -690,14 +691,8 @@ module internal Interpreter =
                     if not (functions1.ContainsKey(x)) then
                         functions1[x] <- functions2[x]
 
-                let checkVar x =
-                    if not (v1.ContainsKey(x)) then
-                        v1[x] <- v2[x]
-
-
                 let _ = List.map checkProps l2
                 let _ = List.map checkFunc (List.ofSeq functions2.Keys)
-                let _ = List.map checkVar (List.ofSeq v2.Keys)
 
                 classes[s1] <- (List.append l1 l2, (v1, functions1))
 
