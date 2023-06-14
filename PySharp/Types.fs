@@ -44,7 +44,7 @@ and Scope = VarLookup * FunctionsLookup * ClassLookup * ModulesLookup
 
 and ScopeClass=VarLookup * FunctionsLookup
 
-and ProgramScope = Scope * instruction[]
+and ProgramScope = Dictionary<identifier,instruction[]>*Scope * instruction[]
 
 and value =
     | MpNull
@@ -112,3 +112,4 @@ and instruction =
     | MpImpl of identPos * instruction[]
     | MpImplDeriving of identPos * identPos * instruction[]
     | MpModule of identPos * instruction[]
+    | MpImport of identPos

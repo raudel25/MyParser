@@ -11,25 +11,59 @@ static class Program
             Interactive();
             return;
         }
-
-        if (!File.Exists(args[0]))
+        
+        var modules= Compiler(args[0]);
+        
+        if(modules is null) return;
+        if (!modules.ContainsKey("main"))
         {
-            Console.WriteLine("File does not exist");
+            Console.WriteLine("The file main.ps does not exist");
             return;
         }
 
-        var programSrc = File.ReadAllText(args[0]);
-
+        var main = modules["main"];
+        modules.Remove("main");
+        
         try
         {
-            var program = PySharp.mpParse(programSrc);
-
-            PySharp.mpRun(program);
+            PySharp.mpRun(main,modules);
         }
         catch (Exception e)
         {
             Console.WriteLine(e.Message);
         }
+    }
+
+    static Dictionary<string,instruction[]>? Compiler(string path)
+    {
+        if (!Directory.Exists(path))
+        {
+            Console.WriteLine("Directory does not exist");
+            return null;
+        }
+        
+        var files = Directory.GetFiles(path, "*ps");
+
+        var modules = PySharp.mpModules;
+
+        foreach (var file in files)
+        {
+            var programSrc = File.ReadAllText(file);
+            var module = Path.GetFileName(file)[..^3];
+            try
+            {
+                var program = PySharp.mpParse(programSrc);
+                
+                modules.Add(module,program);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                return null;
+            }
+        }
+        
+        return modules;
     }
 
     static bool Break(string? instr) => instr is "q" or "quit" or "exit";

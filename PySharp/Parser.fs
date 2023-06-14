@@ -27,7 +27,8 @@ module internal Parser =
           "and"
           "or"
           "xor"
-          "module" ]
+          "module"
+          "import" ]
 
     let reservedFunctions0 = [ "input" ]
     let reservedFunctions1 = [ "printLn"; "printL"; "int"; "double"; "str"; "char" ; "size" ]
@@ -478,6 +479,8 @@ module internal Parser =
     let mpImplDeriving = attempt mpImplDerivingB <|> mpImplDerivingS
     
     let mpModule= pipe3 (str_ws1 "module") (mpIdentifier|>mpPosition) mpBlock (fun _ m b-> MpModule(m,b))
+    
+    let mpImport= pipe3 (str_ws1 "import") (mpIdentifier|>mpPosition) wsl (fun _ m _ ->MpImport m)
 
     let mpReturnValue = pipe2 (str_ws1 "return") mpExpr (fun _ -> MpReturn)
 
@@ -521,7 +524,8 @@ module internal Parser =
           mpClass
           mpImplDeriving
           mpImpl
-          mpModule ]
+          mpModule
+          mpImport ]
         |> List.map attempt
         |> choice
 
