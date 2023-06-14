@@ -55,10 +55,10 @@ and value =
     | MpChar of char
     | MpTupleValue of value[]
     | MpArrayValue of value[]
-    | MpFuncStaticValue of identifier * identifier list * identifier list * instruction[] * ScopeClass
-    | MpFuncSelfValue of identifier * identifier list * identifier list * instruction[] * ScopeClass * value
-    | MpObjectValue of identifier * Dictionary<identifier, value> * ScopeClass
-    | MpClassValue of identifier * identifier list * ScopeClass
+    | MpFuncStaticValue of identifier * identifier list * identifier list * instruction[] * Scope
+    | MpFuncSelfValue of identifier * identifier list * identifier list * instruction[] * Scope * value
+    | MpObjectValue of identifier * Dictionary<identifier, value> * Scope
+    | MpClassValue of identifier * identifier list * Scope
     | MpModuleValue of identifier * Scope
 
 and exprT =

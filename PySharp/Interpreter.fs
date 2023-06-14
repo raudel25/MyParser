@@ -100,11 +100,12 @@ module internal Interpreter =
         | MpVar identifier ->
             if functions.ContainsKey(identifier) then
                 match functions[identifier] with
-                | Static (l, g, b) -> MpFuncStaticValue(identifier, l, g, b, (variables, functions))
+                | Static (l, g, b) ->
+                    MpFuncStaticValue(identifier, l, g, b, (variables, functions, classes, Module modules))
                 | _ -> raise (Exception(error pos "Cannot access an instance function in a static context"))
             elif classes.ContainsKey(identifier) then
-                let l, f = classes[identifier]
-                MpClassValue(identifier, l, f)
+                let l, (v, f) = classes[identifier]
+                MpClassValue(identifier, l, (v, f, classes, Module modules))
             elif modules.ContainsKey(identifier) then
                 let m = modules[identifier]
                 MpModuleValue(identifier, m)
@@ -128,8 +129,8 @@ module internal Interpreter =
 
         | MpIdentProp (identifier, indices) ->
             if classes.ContainsKey(identifier) then
-                let l, f = classes[identifier]
-                let value = MpClassValue(identifier, l, f)
+                let l, (v, f) = classes[identifier]
+                let value = MpClassValue(identifier, l, (v, f, classes, Module modules))
 
                 getProp scope value indices 0
             elif modules.ContainsKey(identifier) then
@@ -169,12 +170,14 @@ module internal Interpreter =
                 (globals: identifier list)
                 (variables: VarLookup)
                 (functions: FunctionsLookup)
+                (classes: ClassLookup)
+                (modules: ModulesLookup)
                 =
+                let modules = getModule modules
                 let vars = VarLookup()
                 let newFunctions = FunctionsLookup()
                 let newClasses = ClassLookup()
                 let newModules = Dictionary<identifier, Scope>()
-                let newModules = Module newModules
 
                 if identifiers.Length <> expr.Length then
                     raise (Exception(error pos "Function does not have correct parameters"))
@@ -189,27 +192,29 @@ module internal Interpreter =
 
                 let _ = List.map (fun f -> newClasses[f] <- classes[f]) (List.ofSeq classes.Keys)
 
+                let _ = List.map (fun f -> newModules[f] <- modules[f]) (List.ofSeq modules.Keys)
+
                 (vars, newFunctions, newClasses, newModules)
 
             match s with
-            | MpFuncStaticValue (_, identifiers, globals, block, (v, f)) ->
+            | MpFuncStaticValue (_, identifiers, globals, block, (v, f, c, m)) ->
                 let vars, newFunctions, newClasses, newModules =
-                    functionParams identifiers globals v f
+                    functionParams identifiers globals v f c m
 
                 let aux =
-                    mpRunAux (ProgramScope(files, (vars, newFunctions, newClasses, newModules), block))
+                    mpRunAux (ProgramScope(files, (vars, newFunctions, newClasses, Module newModules), block))
 
                 let _ = List.map (fun var -> variables[var] <- vars[var]) globals
 
                 aux
-            | MpFuncSelfValue (_, identifiers, globals, block, (v, f), value) ->
+            | MpFuncSelfValue (_, identifiers, globals, block, (v, f, c, m), value) ->
                 let vars, newFunctions, newClasses, newModules =
-                    functionParams identifiers globals v f
+                    functionParams identifiers globals v f c m
 
                 vars["self"] <- value
 
                 let aux =
-                    mpRunAux (ProgramScope(files, (vars, newFunctions, newClasses, newModules), block))
+                    mpRunAux (ProgramScope(files, (vars, newFunctions, newClasses, Module newModules), block))
 
                 let _ = List.map (fun var -> variables[var] <- vars[var]) globals
 
@@ -248,7 +253,7 @@ module internal Interpreter =
             let newVars = List.map fst vars
             checkFuncVars vars functions classes
             let globals = globalFunVars variables vars
-            MpFuncStaticValue("lambda", newVars, globals, block, (variables, functions))
+            MpFuncStaticValue("lambda", newVars, globals, block, (variables, functions, classes, Module modules))
 
         | MpSelf ->
             if not (variables.ContainsKey("self")) then
@@ -332,14 +337,14 @@ module internal Interpreter =
 
         | MpProperty (prop, pos) ->
             match value with
-            | MpObjectValue (_, props, (v, f)) ->
+            | MpObjectValue (_, props, (v, f, c, m)) ->
                 if f.ContainsKey(prop) && ind = indices.Length - 1 then
                     match f[prop] with
                     | Static (vars, g, b) ->
-                        let value = MpFuncStaticValue(prop, vars, g, b, (v, f))
+                        let value = MpFuncStaticValue(prop, vars, g, b, (v, f, c, m))
                         getValue value
                     | Self (vars, g, b) ->
-                        let value = MpFuncSelfValue(prop, vars, g, b, (v, f), value)
+                        let value = MpFuncSelfValue(prop, vars, g, b, (v, f, c, m), value)
                         getValue value
                 elif props.ContainsKey(prop) then
                     getValue props[prop]
@@ -347,11 +352,11 @@ module internal Interpreter =
                     getValue v[prop]
                 else
                     raise (Exception(error pos "The property is not correct"))
-            | MpClassValue (_, _, (v, f)) ->
+            | MpClassValue (_, _, (v, f, c, m)) ->
                 if f.ContainsKey(prop) then
                     match f[prop] with
                     | Static (vars, g, b) ->
-                        let value = MpFuncStaticValue(prop, vars, g, b, (v, f))
+                        let value = MpFuncStaticValue(prop, vars, g, b, (v, f, c, m))
                         getValue value
                     | _ -> raise (Exception(error pos "The property is not correct"))
                 elif v.ContainsKey(prop) then
@@ -364,14 +369,14 @@ module internal Interpreter =
                 if f.ContainsKey(prop) then
                     match f[prop] with
                     | Static (vars, g, b) ->
-                        let value = MpFuncStaticValue(prop, vars, g, b, (v, f))
+                        let value = MpFuncStaticValue(prop, vars, g, b, (v, f, c, Module m))
                         getValue value
                     | _ -> raise (Exception(error pos "The property is not correct"))
                 elif v.ContainsKey(prop) then
                     getValue v[prop]
                 elif c.ContainsKey(prop) then
-                    let l, s = c[prop]
-                    let value = MpClassValue(prop, l, s)
+                    let l, (v, f) = c[prop]
+                    let value = MpClassValue(prop, l, (v, f, c, Module m))
                     getValue value
                 elif m.ContainsKey(prop) then
                     let value = m[prop]
@@ -405,7 +410,7 @@ module internal Interpreter =
 
         | MpProperty (prop, pos) ->
             match value with
-            | MpObjectValue (_, props, (v, _)) ->
+            | MpObjectValue (_, props, (v, _, _, _)) ->
                 if props.ContainsKey(prop) then
                     if ind = indices.Length - 1 then
                         props[prop] <- e
@@ -461,7 +466,7 @@ module internal Interpreter =
             then
                 raise (Exception(error pos "There are two terms with the same name"))
 
-        let instModule pos identifier block =
+        let instrModule pos identifier block =
             let _ = sameName pos identifier
 
             let newVariables = VarLookup()
@@ -643,10 +648,10 @@ module internal Interpreter =
                 let _, (variables, functions) = classes[s]
 
                 let newClasses = ClassLookup()
-
                 let newModules = Dictionary<identifier, Scope>()
 
                 let _ = List.map (fun x -> newClasses[x] <- classes[x]) (List.ofSeq classes.Keys)
+                let _ = List.map (fun s -> newModules[s] <- modules[s]) (List.ofSeq modules.Keys)
 
                 if functions.Count <> 0 then
                     raise (Exception(error pos "There are two implementations for the same class"))
@@ -666,8 +671,10 @@ module internal Interpreter =
                 let l2, (v2, functions2) = classes[s2]
 
                 let newClasses = ClassLookup()
-
                 let newModules = Dictionary<identifier, Scope>()
+
+                let _ = List.map (fun x -> newClasses[x] <- classes[x]) (List.ofSeq classes.Keys)
+                let _ = List.map (fun s -> newModules[s] <- modules[s]) (List.ofSeq modules.Keys)
 
                 if functions.Count <> 0 then
                     raise (Exception(error p1 "There are two implementations for the same class"))
@@ -696,14 +703,14 @@ module internal Interpreter =
 
                 Execute
 
-            | MpModule ((identifier, pos), block) -> instModule pos identifier block
+            | MpModule ((identifier, pos), block) -> instrModule pos identifier block
 
             | MpImport (identifier, pos) ->
                 if (not (files.ContainsKey(identifier))) then
                     raise (Exception(error pos $"The file {identifier}.ps does not exist"))
 
                 let block = files[identifier]
-                instModule pos identifier block
+                instrModule pos identifier block
 
         and executeBlock block =
             let rec loop i =
