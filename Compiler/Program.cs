@@ -36,7 +36,7 @@ static class Program
 
     static void Interactive()
     {
-        var (stateVar, stateFunc, stateStruct) = PySharp.mpState;
+        var (scopeVar, scopeFunc, scopeClass,scopeModules) = PySharp.mpScope;
 
         while (true)
         {
@@ -48,24 +48,25 @@ static class Program
             if (Break(instr))
                 break;
 
-            if (instr != null && stateVar.ContainsKey(instr))
+            if (instr != null && scopeVar.ContainsKey(instr))
             {
-                Console.WriteLine(PySharp.mpToStr(stateVar[instr]));
+                Console.WriteLine(PySharp.mpToStr(scopeVar[instr]));
                 continue;
             }
 
             try
             {
                 var program = PySharp.mpParse(instr);
-
-                PySharp.mpInteractive(stateVar, stateFunc, stateStruct, program);
+                
+                PySharp.mpInteractive(scopeVar, scopeFunc, scopeClass,scopeModules, program);
             }
             catch (Exception e)
             {
                 Console.WriteLine(e.Message);
-                stateVar.Clear();
-                stateFunc.Clear();
-                stateStruct.Clear();
+                scopeVar.Clear();
+                scopeFunc.Clear();
+                scopeClass.Clear();
+                scopeModules.Clear();
             }
         }
     }

@@ -1,5 +1,6 @@
 namespace PySharp
 
+open System.Collections.Generic
 open PySharp.Parser
 open PySharp.Interpreter
 open PySharp.LibraryFunc
@@ -11,24 +12,33 @@ module PySharp =
         | Success (result, _, _) -> result |> List.toArray
         | Failure (errorMsg, _, _) -> failwith errorMsg
 
-    let mpState =
+    let mpScope =
         let variables = VarLookup()
         let functions = FunctionsLookup()
         let structs = ClassLookup()
+        let modules = Dictionary<identifier, Scope>()
 
-        State(variables, functions, structs)
+        (variables, functions, structs, modules)
 
-    let mpInteractive (state: State) (program: instruction[]) =
-        let variables, functions, structs = state
+    let mpInteractive
+        (variables: VarLookup)
+        (functions: FunctionsLookup)
+        (classes: ClassLookup)
+        (modules: Dictionary<identifier, Scope>)
+        (program: instruction[])
+        =
 
-        let _ = mpRunAux (ProgramState(variables, functions, structs, program))
+        let _ =
+            mpRunAux (ProgramScope((variables, functions, classes, Module modules), program))
+
         ()
 
     let mpRun (program: instruction[]) =
         let variables = VarLookup()
         let functions = FunctionsLookup()
         let structs = ClassLookup()
+        let modules = Module(Dictionary<identifier, Scope>())
 
-        mpRunAux (ProgramState(variables, functions, structs, program))
+        mpRunAux (ProgramScope((variables, functions, structs, modules), program))
 
     let mpToStr value = toStr value

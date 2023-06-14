@@ -36,13 +36,15 @@ and func =
 
 and FunctionsLookup = Dictionary<identifier, func>
 
-and ClassLookup = Dictionary<identifier, identifier list * Scope>
+and ClassLookup = Dictionary<identifier, identifier list * ScopeClass>
 
-and Scope = VarLookup * FunctionsLookup
+and ModulesLookup = Module of  Dictionary<identifier,Scope>
 
-and State = VarLookup * FunctionsLookup * ClassLookup
+and Scope = VarLookup * FunctionsLookup * ClassLookup * ModulesLookup
 
-and ProgramState = VarLookup * FunctionsLookup * ClassLookup * instruction[]
+and ScopeClass=VarLookup * FunctionsLookup
+
+and ProgramScope = Scope * instruction[]
 
 and value =
     | MpNull
@@ -53,10 +55,10 @@ and value =
     | MpChar of char
     | MpTupleValue of value[]
     | MpArrayValue of value[]
-    | MpFuncStaticValue of identifier * identifier list * identifier list * instruction[] * Scope
-    | MpFuncSelfValue of identifier * identifier list * identifier list * instruction[] * Scope * value
-    | MpObjectValue of identifier * Dictionary<identifier, value> * Scope
-    | MpClassValue of identifier * identifier list * Scope
+    | MpFuncStaticValue of identifier * identifier list * identifier list * instruction[] * ScopeClass
+    | MpFuncSelfValue of identifier * identifier list * identifier list * instruction[] * ScopeClass * value
+    | MpObjectValue of identifier * Dictionary<identifier, value> * ScopeClass
+    | MpClassValue of identifier * identifier list * ScopeClass
 
 and exprT =
     | MpIdentProp of identifier * property list
@@ -108,3 +110,4 @@ and instruction =
     | MpComment
     | MpImpl of identPos * instruction[]
     | MpImplDeriving of identPos * identPos * instruction[]
+    | MpModule of instruction[]

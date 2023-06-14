@@ -80,9 +80,10 @@ module internal Interpreter =
         | Continue of uint8 * Position
         | Return of value
 
-    let rec eval (state: ProgramState) (expr: expr) =
-        let (variables: VarLookup, functions: FunctionsLookup, classes: ClassLookup, _: instruction[]) =
-            state
+    let rec eval (scope: ProgramScope) (expr: expr) =
+        let ((variables: VarLookup, functions: FunctionsLookup, classes: ClassLookup, modules: ModulesLookup),
+             _: instruction[]) =
+            scope
 
         let expr, pos = expr
 
@@ -102,51 +103,51 @@ module internal Interpreter =
             else
                 raise (Exception(error pos "Variable does not exist"))
 
-        | MpArrayL a -> MpArrayValue(Array.map (eval state) a)
+        | MpArrayL a -> MpArrayValue(Array.map (eval scope) a)
 
         | MpArrayD (a, b) ->
-            let a = eval state a
+            let a = eval scope a
             let _, pos = b
-            let b = eval state b
+            let b = eval scope b
 
             match b with
             | MpInt b -> MpArrayValue(Array.create b a)
             | _ -> raise (Exception(error pos "Cannot convert to int"))
 
-        | MpTuple a -> MpTupleValue(Array.map (eval state) a)
+        | MpTuple a -> MpTupleValue(Array.map (eval scope) a)
 
         | MpIdentProp (identifier, indices) ->
             if classes.ContainsKey(identifier) then
                 let l, f = classes[identifier]
                 let value = MpClassValue(identifier, l, f)
 
-                getProp state value indices 0
+                getProp scope value indices 0
             elif variables.ContainsKey(identifier) then
                 let value = variables[identifier]
 
-                getProp state value indices 0
+                getProp scope value indices 0
             else
                 raise (Exception(error pos "Variable does not exist"))
 
         | MpSlice (identifier, start, stop) ->
-            let value = eval state identifier
-            let start, stop = (eval state start, eval state stop)
+            let value = eval scope identifier
+            let start, stop = (eval scope start, eval scope stop)
 
             match (value, start, stop) with
             | MpArrayValue v, MpInt start, MpInt stop -> MpArrayValue v[start .. stop - 1]
             | MpString s, MpInt start, MpInt stop -> MpString s[start .. stop - 1]
             | _ -> raise (Exception(error pos "Slice is not supported"))
 
-        | MpNeg x -> arithmetic pos (eval state x) MpMultiply (MpInt(-1))
+        | MpNeg x -> arithmetic pos (eval scope x) MpMultiply (MpInt(-1))
 
-        | MpArithmetic (l, op, r) -> arithmetic pos (eval state l) op (eval state r)
+        | MpArithmetic (l, op, r) -> arithmetic pos (eval scope l) op (eval scope r)
 
-        | MpComparison (l, op, r) -> comparison pos (eval state l) op (eval state r)
+        | MpComparison (l, op, r) -> comparison pos (eval scope l) op (eval scope r)
 
-        | MpLogical (l, op, r) -> logical pos (eval state l) op (eval state r)
+        | MpLogical (l, op, r) -> logical pos (eval scope l) op (eval scope r)
 
         | MpInvoke (s, expr) ->
-            let s = eval state s
+            let s = eval scope s
 
             let functionParams
                 (identifiers: identifier list)
@@ -162,7 +163,7 @@ module internal Interpreter =
                     raise (Exception(error pos "Function does not have correct parameters"))
 
                 let _ =
-                    List.map (fun i -> vars[identifiers[i]] <- (eval state expr[i])) [ 0 .. identifiers.Length - 1 ]
+                    List.map (fun i -> vars[identifiers[i]] <- (eval scope expr[i])) [ 0 .. identifiers.Length - 1 ]
 
                 let _ = List.map (fun var -> vars[var] <- variables[var]) globals
 
@@ -177,7 +178,7 @@ module internal Interpreter =
             | MpFuncStaticValue (_, identifiers, globals, block, (v, f)) ->
                 let vars, newFunctions, newClasses = functionParams identifiers globals v f
 
-                let aux = mpRunAux (ProgramState(vars, newFunctions, newClasses, block))
+                let aux = mpRunAux (ProgramScope((vars, newFunctions, newClasses, modules), block))
 
                 let _ = List.map (fun var -> variables[var] <- vars[var]) globals
 
@@ -186,7 +187,7 @@ module internal Interpreter =
                 let vars, newFunctions, newClasses = functionParams identifiers globals v f
                 vars["self"] <- value
 
-                let aux = mpRunAux (ProgramState(vars, newFunctions, newClasses, block))
+                let aux = mpRunAux (ProgramScope((vars, newFunctions, newClasses, modules), block))
 
                 let _ = List.map (fun var -> variables[var] <- vars[var]) globals
 
@@ -197,16 +198,16 @@ module internal Interpreter =
 
         | MpReservedFunc1 (s, expr) ->
             let _, pos = expr
-            funcLib1 pos s (eval state expr)
+            funcLib1 pos s (eval scope expr)
 
         | MpTernary (cond, e1, e2) ->
-            let cond = eval state cond
+            let cond = eval scope cond
 
-            if (toBool pos cond) then eval state e1 else eval state e2
+            if (toBool pos cond) then eval scope e1 else eval scope e2
 
         | MpClassConst (expr, props) ->
             let _, pos = expr
-            let value = eval state expr
+            let value = eval scope expr
 
             match value with
             | MpClassValue (s, listProps, dictFunc) ->
@@ -216,7 +217,7 @@ module internal Interpreter =
                 let q = Dictionary<identifier, value>()
 
                 let _ =
-                    List.map (fun i -> q[listProps[i]] <- (eval state props[i])) [ 0 .. listProps.Length - 1 ]
+                    List.map (fun i -> q[listProps[i]] <- (eval scope props[i])) [ 0 .. listProps.Length - 1 ]
 
                 MpObjectValue(s, q, dictFunc)
             | _ -> raise (Exception(error pos "Expression is not class"))
@@ -272,12 +273,12 @@ module internal Interpreter =
         | MpXor, MpBool l, MpBool r -> MpBool((not l && r) || (not r && l))
         | _, _, _ -> raise (Exception(error pos "Logical operation is not supported"))
 
-    and getProp (state: ProgramState) (value: value) (indices: property list) ind =
+    and getProp (scope: ProgramScope) (value: value) (indices: property list) ind =
         let getValue v =
             if ind = indices.Length - 1 then
                 v
             else
-                getProp state v indices (ind + 1)
+                getProp scope v indices (ind + 1)
 
         let getArray pos (v: value[]) index =
             if index < 0 || index >= v.Length then
@@ -288,7 +289,7 @@ module internal Interpreter =
         match indices[ind] with
         | MpIndexA index ->
             let _, pos = index
-            let index = toInt pos (eval state index)
+            let index = toInt pos (eval scope index)
 
             match value with
             | MpArrayValue v -> getArray pos v index
@@ -337,7 +338,7 @@ module internal Interpreter =
                     raise (Exception(error pos "The property is not correct"))
             | _ -> raise (Exception(error pos "The property is not correct"))
 
-    and setProp (state: ProgramState) (value: value) (indices: property list) ind (e: value) =
+    and setProp (scope: ProgramScope) (value: value) (indices: property list) ind (e: value) =
         let setArray pos (v: value[]) index =
             if index < 0 || index >= v.Length then
                 raise (Exception(error pos "Index out range"))
@@ -345,12 +346,12 @@ module internal Interpreter =
             if ind = indices.Length - 1 then
                 v[index] <- e
             else
-                setProp state v[index] indices (ind + 1) e
+                setProp scope v[index] indices (ind + 1) e
 
         match indices[ind] with
         | MpIndexA index ->
             let _, pos = index
-            let index = toInt pos (eval state index)
+            let index = toInt pos (eval scope index)
 
             match value with
             | MpArrayValue v -> setArray pos v index
@@ -365,21 +366,22 @@ module internal Interpreter =
                     if ind = indices.Length - 1 then
                         props[prop] <- e
                     else
-                        setProp state props[prop] indices (ind + 1) e
+                        setProp scope props[prop] indices (ind + 1) e
                 elif v.ContainsKey(prop) then
                     if ind = indices.Length - 1 then
                         v[prop] <- e
                     else
-                        setProp state v[prop] indices (ind + 1) e
+                        setProp scope v[prop] indices (ind + 1) e
                 else
                     raise (Exception(error pos "The property is not correct"))
             | _ -> raise (Exception(error pos "The property is not correct"))
 
-    and mpRunAux (state: ProgramState) =
-        let (variables: VarLookup, functions: FunctionsLookup, classes: ClassLookup, program: instruction[]) =
-            state
+    and mpRunAux (scope: ProgramScope) =
+        let ((variables: VarLookup, functions: FunctionsLookup, classes: ClassLookup, modules: ModulesLookup),
+             program: instruction[]) =
+            scope
 
-        let evalAux = eval state
+        let evalAux = eval scope
 
         let assign (value: assign) =
             match value with
@@ -395,7 +397,7 @@ module internal Interpreter =
                 | MpIdentProp (identifier, indices) ->
                     let value = variables[identifier]
 
-                    setProp state value indices 0 (evalAux expr)
+                    setProp scope value indices 0 (evalAux expr)
 
                 | _ -> ()
 
@@ -510,7 +512,7 @@ module internal Interpreter =
                                 Continue(index - (uint8 1), pos)
 
                 loop ()
-                
+
             | MpLoop block ->
                 let rec loop () =
                     match executeBlock block with
@@ -581,7 +583,7 @@ module internal Interpreter =
                 if functions.Count <> 0 then
                     raise (Exception(error pos "There are two implementations for the same class"))
 
-                let _ = mpRunAux (variables, functions, classes, block)
+                let _ = mpRunAux ((variables, functions, classes, modules), block)
 
                 Execute
 
@@ -602,7 +604,7 @@ module internal Interpreter =
                     if List.contains x l1 then
                         raise (Exception(error p1 "There are two properties with the same name"))
 
-                let _ = mpRunAux (v1, functions1, classes, block)
+                let _ = mpRunAux ((v1, functions1, classes, modules), block)
 
 
                 let checkFunc x =
