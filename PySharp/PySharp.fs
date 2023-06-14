@@ -1,9 +1,10 @@
 namespace PySharp
 
 open System.Collections.Generic
-open PySharp.Parser
-open PySharp.Interpreter
-open PySharp.LibraryFunc
+open Parser
+open Interpreter
+open LibraryFunc
+open CircularReference
 open FParsec
 
 module PySharp =
@@ -27,23 +28,26 @@ module PySharp =
         (modules: Dictionary<identifier, Scope>)
         (program: instruction[])
         =
-        
-        let files=Dictionary<identifier,instruction[]>()
+
+        let files = Dictionary<identifier, instruction[]>()
+
         let _ =
-            mpRunAux (ProgramScope(files,(variables, functions, classes, Module modules), program))
+            mpRunAux (ProgramScope(files, (variables, functions, classes, Module modules), program))
 
         ()
-        
+
     let mpModules =
-        let m=Dictionary<identifier,instruction[]>()
+        let m = Dictionary<identifier, instruction[]>()
         m
 
-    let mpRun (program: instruction[]) (files:Dictionary<identifier,instruction[]>) =
+    let mpRun (program: instruction[]) (files: Dictionary<identifier, instruction[]>) =
         let variables = VarLookup()
         let functions = FunctionsLookup()
         let structs = ClassLookup()
         let modules = Module(Dictionary<identifier, Scope>())
 
-        mpRunAux (ProgramScope(files,(variables, functions, structs, modules), program))
+        mpRunAux (ProgramScope(files, (variables, functions, structs, modules), program))
 
     let mpToStr value = toStr value
+
+    let mpCircularReference dict = mpCircularReferenceInternal dict

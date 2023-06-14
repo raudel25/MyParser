@@ -700,7 +700,7 @@ module internal Interpreter =
                 
             | MpImport (identifier, pos) ->
                 if(not (files.ContainsKey(identifier))) then
-                    raise(Exception(error pos $"The file {identifier} does not exist"))
+                    raise(Exception(error pos $"The file {identifier}.ps does not exist"))
                                 
                 let block=files[identifier]
                 instModule pos identifier block

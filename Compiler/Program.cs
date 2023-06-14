@@ -13,7 +13,7 @@ static class Program
         }
         
         var modules= Compiler(args[0]);
-        
+
         if(modules is null) return;
         if (!modules.ContainsKey("main"))
         {
@@ -23,9 +23,15 @@ static class Program
 
         var main = modules["main"];
         modules.Remove("main");
-        
+
         try
         {
+            if (PySharp.mpCircularReference(modules))
+            {
+                Console.WriteLine("Circular dependency");
+                return;
+            }
+            
             PySharp.mpRun(main,modules);
         }
         catch (Exception e)
