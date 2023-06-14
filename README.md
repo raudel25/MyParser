@@ -11,16 +11,18 @@ El proyecto se encuentra desarrollado en **.Net 7** y depende de la biblioteca <
 Para ejecutar el proyecto debe contar en sus sistema operativo con las especificaciones antes mencionadas, una vez hecho esto puede ejecutar en su terminal:
 
 ```bash
-make file=<file>
+make path=<path>
 ```
 
-donde `<file>` es la ruta del archivo que contiene el código a ejecutar. Otra forma de ejecutar el proyecto es la siguiente si no tiene **make** instalado en su sistema:
+donde `<path>` es la ruta del directorio que contiene el código a ejecutar. Otra forma de ejecutar el proyecto es la siguiente si no tiene **make** instalado en su sistema:
 
 ```bash
-dotnet run --project Compiler <file>
+dotnet run --project Compiler <path>
 ```
 
-también cuenta con una consola interactiva a la cual se puede acceder mediante el comando:
+Una vez en el directorio especificado se ejecutará el archivo `main.ps`, además puede importar código desde cualquier archivo ubicado en el directorio que contenga la extensión `*.ps`. 
+<br/>
+También cuenta con una consola interactiva a la cual se puede acceder mediante el comando:
 
 ```bash
 make
