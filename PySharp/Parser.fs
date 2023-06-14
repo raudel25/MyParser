@@ -31,7 +31,9 @@ module internal Parser =
           "import" ]
 
     let reservedFunctions0 = [ "input" ]
-    let reservedFunctions1 = [ "printLn"; "printL"; "int"; "double"; "str"; "char" ; "size" ]
+
+    let reservedFunctions1 =
+        [ "printLn"; "printL"; "int"; "double"; "str"; "char"; "size" ]
 
     let (>>%) p x = p |>> (fun _ -> x)
 
@@ -389,8 +391,7 @@ module internal Parser =
 
     let mpRange = attempt mpRange3 <|> attempt mpRange2 <|> attempt mpRange1
 
-    let mpLoop =
-        pipe2 (str_ws "loop") mpBlock (fun _ -> MpLoop)
+    let mpLoop = pipe2 (str_ws "loop") mpBlock (fun _ -> MpLoop)
 
     let mpWhile =
         pipe5 (str_ws "while") (str_ws "(") mpLogical (str_ws ")") mpBlock (fun _ _ e _ b -> MpWhile(e, b))
@@ -477,10 +478,12 @@ module internal Parser =
         pipe2 mpDeriving mpBlock (fun (x, y) b -> MpImplDeriving(x, y, b))
 
     let mpImplDeriving = attempt mpImplDerivingB <|> mpImplDerivingS
-    
-    let mpModule= pipe3 (str_ws1 "module") (mpIdentifier|>mpPosition) mpBlock (fun _ m b-> MpModule(m,b))
-    
-    let mpImport= pipe3 (str_ws1 "import") (mpIdentifier|>mpPosition) wsl (fun _ m _ ->MpImport m)
+
+    let mpModule =
+        pipe3 (str_ws1 "module") (mpIdentifier |> mpPosition) mpBlock (fun _ m b -> MpModule(m, b))
+
+    let mpImport =
+        pipe3 (str_ws1 "import") (mpIdentifier |> mpPosition) wsl (fun _ m _ -> MpImport m)
 
     let mpReturnValue = pipe2 (str_ws1 "return") mpExpr (fun _ -> MpReturn)
 

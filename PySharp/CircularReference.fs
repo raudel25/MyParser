@@ -4,7 +4,7 @@ open System
 open System.Collections.Generic
 open LibraryFunc
 
-module internal CircularReference=
+module internal CircularReference =
     let rec mpStepAdj (m: string) (block: instruction[]) (adj: List<int>[]) (dict: Dictionary<string, int>) =
         let index = dict[m]
 
@@ -32,8 +32,9 @@ module internal CircularReference=
             | MpImplDeriving (_, _, b) -> exeB b
             | MpModule (_, b) -> exeB b
             | MpImport (s, pos) ->
-                if s="main" then
-                    raise (Exception(error pos $"The file {s}.ps cannot be imported"))                
+                if s = "main" then
+                    raise (Exception(error pos $"The file {s}.ps cannot be imported"))
+
                 if not (dict.ContainsKey(s)) then
                     raise (Exception(error pos $"The file {s}.ps does not exist"))
 
@@ -81,16 +82,14 @@ module internal CircularReference=
 
             if inDegree[i] = 0 then q.Enqueue(i) else ()
 
-        let mutable cant = 0
+        let rec f cant =
+            if q.Count = 0 then
+                cant
+            else
+                let n = q.Peek()
+                let _ = q.Dequeue()
 
-        while q.Count <> 0 do
-            let n = q.Peek()
-            let _ = q.Dequeue()
-            cant <- cant + 1
+                let _ = List.map aux (List.ofSeq adj[n])
+                f cant + 1
 
-            let _ = List.map aux (List.ofSeq adj[n])
-            ()
-
-        cant <> adj.Length
-
-
+        f 0 <> adj.Length

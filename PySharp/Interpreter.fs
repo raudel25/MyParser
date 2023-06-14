@@ -85,7 +85,8 @@ module internal Interpreter =
         | Return of value
 
     let rec eval (scope: ProgramScope) (expr: expr) =
-        let (files,(variables: VarLookup, functions: FunctionsLookup, classes: ClassLookup, modules: ModulesLookup),
+        let (files,
+             (variables: VarLookup, functions: FunctionsLookup, classes: ClassLookup, modules: ModulesLookup),
              _: instruction[]) =
             scope
 
@@ -196,7 +197,7 @@ module internal Interpreter =
                     functionParams identifiers globals v f
 
                 let aux =
-                    mpRunAux (ProgramScope(files,(vars, newFunctions, newClasses, newModules), block))
+                    mpRunAux (ProgramScope(files, (vars, newFunctions, newClasses, newModules), block))
 
                 let _ = List.map (fun var -> variables[var] <- vars[var]) globals
 
@@ -208,7 +209,7 @@ module internal Interpreter =
                 vars["self"] <- value
 
                 let aux =
-                    mpRunAux (ProgramScope(files,(vars, newFunctions, newClasses, newModules), block))
+                    mpRunAux (ProgramScope(files, (vars, newFunctions, newClasses, newModules), block))
 
                 let _ = List.map (fun var -> variables[var] <- vars[var]) globals
 
@@ -459,8 +460,8 @@ module internal Interpreter =
                 || modules.ContainsKey(identifier)
             then
                 raise (Exception(error pos "There are two terms with the same name"))
-                
-        let instModule pos identifier block=
+
+        let instModule pos identifier block =
             let _ = sameName pos identifier
 
             let newVariables = VarLookup()
@@ -469,7 +470,7 @@ module internal Interpreter =
             let newModules = Dictionary<identifier, Scope>()
 
             let newScope = (newVariables, newFunctions, newClasses, Module newModules)
-            let _ = mpRunAux (ProgramScope(files,newScope, block))
+            let _ = mpRunAux (ProgramScope(files, newScope, block))
             modules.Add(identifier, newScope)
 
             Execute
@@ -650,7 +651,7 @@ module internal Interpreter =
                 if functions.Count <> 0 then
                     raise (Exception(error pos "There are two implementations for the same class"))
 
-                let _ = mpRunAux (files,(variables, functions, classes, Module newModules), block)
+                let _ = mpRunAux (files, (variables, functions, classes, Module newModules), block)
 
                 Execute
 
@@ -675,7 +676,7 @@ module internal Interpreter =
                     if List.contains x l1 then
                         raise (Exception(error p1 "There are two properties with the same name"))
 
-                let _ = mpRunAux (files,(v1, functions1, newClasses, Module newModules), block)
+                let _ = mpRunAux (files, (v1, functions1, newClasses, Module newModules), block)
 
 
                 let checkFunc x =
@@ -695,14 +696,13 @@ module internal Interpreter =
 
                 Execute
 
-            | MpModule ((identifier, pos), block) ->
-                instModule pos identifier block
-                
+            | MpModule ((identifier, pos), block) -> instModule pos identifier block
+
             | MpImport (identifier, pos) ->
-                if(not (files.ContainsKey(identifier))) then
-                    raise(Exception(error pos $"The file {identifier}.ps does not exist"))
-                                
-                let block=files[identifier]
+                if (not (files.ContainsKey(identifier))) then
+                    raise (Exception(error pos $"The file {identifier}.ps does not exist"))
+
+                let block = files[identifier]
                 instModule pos identifier block
 
         and executeBlock block =

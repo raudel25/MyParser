@@ -38,13 +38,13 @@ and FunctionsLookup = Dictionary<identifier, func>
 
 and ClassLookup = Dictionary<identifier, identifier list * ScopeClass>
 
-and ModulesLookup = Module of  Dictionary<identifier,Scope>
+and ModulesLookup = Module of Dictionary<identifier, Scope>
 
 and Scope = VarLookup * FunctionsLookup * ClassLookup * ModulesLookup
 
-and ScopeClass=VarLookup * FunctionsLookup
+and ScopeClass = VarLookup * FunctionsLookup
 
-and ProgramScope = Dictionary<identifier,instruction[]>*Scope * instruction[]
+and ProgramScope = Dictionary<identifier, instruction[]> * Scope * instruction[]
 
 and value =
     | MpNull

@@ -18,13 +18,14 @@ module internal LibraryFunc =
 
             if x.Length = 0 then "" else f 0
 
-        let funcToStr x (y:identifier list) =
+        let funcToStr x (y: identifier list) =
             if y.Length = 0 then
                 $"func {x} ()"
             else
                 let y = List.map MpString y |> List.toArray
                 $"func {x} ( {aux y} )"
-        let classObject x (y:identifier list) t=
+
+        let classObject x (y: identifier list) t =
             if y.Length = 0 then
                 $"{t} {x}" + "{}"
             else
@@ -32,7 +33,7 @@ module internal LibraryFunc =
                 let s1 = $"{t} {x}" + " { "
                 let s2 = (aux y) + " }"
                 s1 + s2
-                
+
         match value with
         | MpInt x -> string x
         | MpDouble x -> string x
@@ -41,14 +42,14 @@ module internal LibraryFunc =
         | MpString x -> x
         | MpChar x -> string x
         | MpNull -> "null"
-        | MpFuncStaticValue (x, y, _, _,_) -> funcToStr x y
-        | MpFuncSelfValue (x, y, _, _,_, _) -> funcToStr x y
+        | MpFuncStaticValue (x, y, _, _, _) -> funcToStr x y
+        | MpFuncSelfValue (x, y, _, _, _, _) -> funcToStr x y
         | MpArrayValue x -> $"[ {aux x} ]"
         | MpTupleValue x -> $"( {aux x} )"
         | MpObjectValue (x, y, _) -> classObject x (List.ofSeq y.Keys) "object"
         | MpClassValue (x, y, _) -> classObject x y "class"
-        | MpModuleValue(x,_)-> $"module {x}"
-            
+        | MpModuleValue (x, _) -> $"module {x}"
+
 
     let toChar pos value =
         match value with
@@ -107,12 +108,12 @@ module internal LibraryFunc =
             | _ -> raise (Exception())
         with _ ->
             raise (Exception(error pos "Cannot convert to double"))
-            
-    let size pos value=
+
+    let size pos value =
         match value with
-        | MpArrayValue x->MpInt x.Length
-        | MpString x->MpInt x.Length
-        | _-> raise(Exception(error pos "The object do not have size property"))
+        | MpArrayValue x -> MpInt x.Length
+        | MpString x -> MpInt x.Length
+        | _ -> raise (Exception(error pos "The object do not have size property"))
 
     let funcLib0 s =
         match s with
@@ -127,5 +128,5 @@ module internal LibraryFunc =
         | "double" -> toDouble pos value
         | "str" -> MpString(toStr value)
         | "char" -> toChar pos value
-        | "size"-> size pos value
+        | "size" -> size pos value
         | _ -> MpNull
