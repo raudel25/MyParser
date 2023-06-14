@@ -59,6 +59,7 @@ and value =
     | MpFuncSelfValue of identifier * identifier list * identifier list * instruction[] * ScopeClass * value
     | MpObjectValue of identifier * Dictionary<identifier, value> * ScopeClass
     | MpClassValue of identifier * identifier list * ScopeClass
+    | MpModuleValue of identifier * Scope
 
 and exprT =
     | MpIdentProp of identifier * property list
@@ -110,4 +111,4 @@ and instruction =
     | MpComment
     | MpImpl of identPos * instruction[]
     | MpImplDeriving of identPos * identPos * instruction[]
-    | MpModule of instruction[]
+    | MpModule of identPos * instruction[]

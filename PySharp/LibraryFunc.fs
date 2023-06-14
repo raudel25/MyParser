@@ -47,6 +47,7 @@ module internal LibraryFunc =
         | MpTupleValue x -> $"( {aux x} )"
         | MpObjectValue (x, y, _) -> classObject x (List.ofSeq y.Keys) "object"
         | MpClassValue (x, y, _) -> classObject x y "class"
+        | MpModuleValue(x,_)-> $"module {x}"
             
 
     let toChar pos value =
