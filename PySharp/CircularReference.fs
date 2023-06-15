@@ -5,7 +5,7 @@ open System.Collections.Generic
 open LibraryFunc
 
 module internal CircularReference =
-    let rec mpStepAdj (m: string) (block: instruction[]) (adj: List<int>[]) (dict: Dictionary<string, int>) =
+    let rec mpStepAdj (m: string) (block: instruction[]) (adj: List<int>[]) (dict: Dictionary<string, int>)=
         let index = dict[m]
 
         let exeB b = mpStepAdj m b adj dict
@@ -33,10 +33,10 @@ module internal CircularReference =
             | MpModule (_, b) -> exeB b
             | MpImport (s, pos) ->
                 if s = "main" then
-                    raise (Exception(error pos $"The file {s}.ps cannot be imported"))
+                    raise (Exception(error (pos,m) $"The file {s}.ps cannot be imported"))
 
                 if not (dict.ContainsKey(s)) then
-                    raise (Exception(error pos $"The file {s}.ps does not exist"))
+                    raise (Exception(error (pos,m) $"The file {s}.ps does not exist"))
 
                 adj[ index ].Add(dict[s])
             | _ -> ()

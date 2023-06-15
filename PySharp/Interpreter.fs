@@ -8,7 +8,7 @@ open PySharp.LibraryFunc
 
 module internal Interpreter =
 
-    let fromObj (pos: Position) (x: obj) =
+    let fromObj (posFile: Position * string) (x: obj) =
         match x with
         | :? bool as x -> MpBool x
         | :? int as x -> MpInt x
@@ -16,24 +16,24 @@ module internal Interpreter =
         | :? string as x -> MpString x
         | :? char as x -> MpChar x
         | null -> MpNull
-        | x -> raise (Exception(error pos (x.ToString())))
+        | x -> raise (Exception(error posFile (x.ToString())))
 
-    let toInt (pos: Position) =
+    let toInt (posFile: Position * string) =
         let f x =
             match x with
             | MpInt x -> x
             | MpDouble x -> int x
             | MpString x -> int x
             | MpNull -> 0
-            | _ -> raise (Exception(error pos "Cannot convert to int"))
+            | _ -> raise (Exception(error posFile "Cannot convert to int"))
 
         f
 
-    let toBool (pos: Position) =
+    let toBool (posFile: Position * string) =
         let f x =
             match x with
             | MpBool x -> x
-            | _ -> raise (Exception(error pos "Cannot convert to bool"))
+            | _ -> raise (Exception(error posFile "Cannot convert to bool"))
 
         f
 
@@ -44,14 +44,14 @@ module internal Interpreter =
         | MpDouble l, MpInt r -> Some(l, double r)
         | _, _ -> None
 
-    let compare (pos: Position) lhs rhs =
+    let compare (posFile: Position * string) lhs rhs =
         match lhs, rhs with
         | MpBool l, MpBool r -> l.CompareTo(r)
         | MpInt l, MpInt r -> l.CompareTo(r)
         | AsDoubles (l, r) -> l.CompareTo(r)
         | MpString l, MpString r -> l.CompareTo(r)
         | MpChar l, MpChar r -> l.CompareTo(r)
-        | _ -> raise (Exception(error pos $"%A{lhs} %A{rhs}"))
+        | _ -> raise (Exception(error posFile $"%A{lhs} %A{rhs}"))
 
     let globalFunVars (variables: VarLookup) vars =
         let contains var =
@@ -66,10 +66,10 @@ module internal Interpreter =
 
         (f variables)
 
-    let checkFuncVars vars (functions: FunctionsLookup) (classes: ClassLookup) =
+    let checkFuncVars vars (file: string) (functions: FunctionsLookup) (classes: ClassLookup) =
         let f (i, p) =
             if functions.ContainsKey(i) || classes.ContainsKey(i) then
-                raise (Exception(error p "There are two terms with the same name"))
+                raise (Exception(error (p, file) "There are two terms with the same name"))
 
         let _ = List.map f vars
         ()
@@ -86,7 +86,7 @@ module internal Interpreter =
 
     let rec eval (scope: ProgramScope) (expr: expr) =
         let (files,
-             (variables: VarLookup, functions: FunctionsLookup, classes: ClassLookup, modules: ModulesLookup),
+             (file, variables: VarLookup, functions: FunctionsLookup, classes: ClassLookup, modules: ModulesLookup),
              _: instruction[]) =
             scope
 
@@ -101,18 +101,18 @@ module internal Interpreter =
             if functions.ContainsKey(identifier) then
                 match functions[identifier] with
                 | Static (l, g, b) ->
-                    MpFuncStaticValue(identifier, l, g, b, (variables, functions, classes, Module modules))
-                | _ -> raise (Exception(error pos "Cannot access an instance function in a static context"))
+                    MpFuncStaticValue(identifier, l, g, b, (file, variables, functions, classes, Module modules))
+                | _ -> raise (Exception(error (pos, file) "Cannot access an instance function in a static context"))
             elif classes.ContainsKey(identifier) then
                 let l, (v, f) = classes[identifier]
-                MpClassValue(identifier, l, (v, f, classes, Module modules))
+                MpClassValue(identifier, l, (file, v, f, classes, Module modules))
             elif modules.ContainsKey(identifier) then
                 let m = modules[identifier]
                 MpModuleValue(identifier, m)
             elif variables.ContainsKey(identifier) then
                 variables[identifier]
             else
-                raise (Exception(error pos "Variable does not exist"))
+                raise (Exception(error (pos, file) "Variable does not exist"))
 
         | MpArrayL a -> MpArrayValue(Array.map (eval scope) a)
 
@@ -123,14 +123,14 @@ module internal Interpreter =
 
             match b with
             | MpInt b -> MpArrayValue(Array.create b a)
-            | _ -> raise (Exception(error pos "Cannot convert to int"))
+            | _ -> raise (Exception(error (pos, file) "Cannot convert to int"))
 
         | MpTuple a -> MpTupleValue(Array.map (eval scope) a)
 
         | MpIdentProp (identifier, indices) ->
             if classes.ContainsKey(identifier) then
                 let l, (v, f) = classes[identifier]
-                let value = MpClassValue(identifier, l, (v, f, classes, Module modules))
+                let value = MpClassValue(identifier, l, (file, v, f, classes, Module modules))
 
                 getProp scope value indices 0
             elif modules.ContainsKey(identifier) then
@@ -143,7 +143,7 @@ module internal Interpreter =
 
                 getProp scope value indices 0
             else
-                raise (Exception(error pos "Variable does not exist"))
+                raise (Exception(error (pos, file) "Variable does not exist"))
 
         | MpSlice (identifier, start, stop) ->
             let value = eval scope identifier
@@ -152,15 +152,15 @@ module internal Interpreter =
             match (value, start, stop) with
             | MpArrayValue v, MpInt start, MpInt stop -> MpArrayValue v[start .. stop - 1]
             | MpString s, MpInt start, MpInt stop -> MpString s[start .. stop - 1]
-            | _ -> raise (Exception(error pos "Slice is not supported"))
+            | _ -> raise (Exception(error (pos, file) "Slice is not supported"))
 
-        | MpNeg x -> arithmetic pos (eval scope x) MpMultiply (MpInt(-1))
+        | MpNeg x -> arithmetic (pos, file) (eval scope x) MpMultiply (MpInt(-1))
 
-        | MpArithmetic (l, op, r) -> arithmetic pos (eval scope l) op (eval scope r)
+        | MpArithmetic (l, op, r) -> arithmetic (pos, file) (eval scope l) op (eval scope r)
 
-        | MpComparison (l, op, r) -> comparison pos (eval scope l) op (eval scope r)
+        | MpComparison (l, op, r) -> comparison (pos, file) (eval scope l) op (eval scope r)
 
-        | MpLogical (l, op, r) -> logical pos (eval scope l) op (eval scope r)
+        | MpLogical (l, op, r) -> logical (pos, file) (eval scope l) op (eval scope r)
 
         | MpInvoke (s, expr) ->
             let s = eval scope s
@@ -180,7 +180,7 @@ module internal Interpreter =
                 let newModules = Dictionary<identifier, Scope>()
 
                 if identifiers.Length <> expr.Length then
-                    raise (Exception(error pos "Function does not have correct parameters"))
+                    raise (Exception(error (pos, file) "Function does not have correct parameters"))
 
                 let _ =
                     List.map (fun i -> vars[identifiers[i]] <- (eval scope expr[i])) [ 0 .. identifiers.Length - 1 ]
@@ -197,40 +197,43 @@ module internal Interpreter =
                 (vars, newFunctions, newClasses, newModules)
 
             match s with
-            | MpFuncStaticValue (_, identifiers, globals, block, (v, f, c, m)) ->
+            | MpFuncStaticValue (_, identifiers, globals, block, (file1, v, f, c, m)) ->
                 let vars, newFunctions, newClasses, newModules =
                     functionParams identifiers globals v f c m
 
                 let aux =
-                    mpRunAux (ProgramScope(files, (vars, newFunctions, newClasses, Module newModules), block))
+                    mpRunAux (ProgramScope(files, (file1, vars, newFunctions, newClasses, Module newModules), block))
 
                 let _ = List.map (fun var -> variables[var] <- vars[var]) globals
 
                 aux
-            | MpFuncSelfValue (_, identifiers, globals, block, (v, f, c, m), value) ->
+            | MpFuncSelfValue (_, identifiers, globals, block, (file1, v, f, c, m), value) ->
                 let vars, newFunctions, newClasses, newModules =
                     functionParams identifiers globals v f c m
 
                 vars["self"] <- value
 
                 let aux =
-                    mpRunAux (ProgramScope(files, (vars, newFunctions, newClasses, Module newModules), block))
+                    mpRunAux (ProgramScope(files, (file1, vars, newFunctions, newClasses, Module newModules), block))
 
                 let _ = List.map (fun var -> variables[var] <- vars[var]) globals
 
                 aux
-            | _ -> raise (Exception(error pos "Expression is not function"))
+            | _ -> raise (Exception(error (pos, file) "Expression is not function"))
 
         | MpReservedFunc0 s -> funcLib0 s
 
         | MpReservedFunc1 (s, expr) ->
             let _, pos = expr
-            funcLib1 pos s (eval scope expr)
+            funcLib1 (pos, file) s (eval scope expr)
 
         | MpTernary (cond, e1, e2) ->
             let cond = eval scope cond
 
-            if (toBool pos cond) then eval scope e1 else eval scope e2
+            if (toBool (pos, file) cond) then
+                eval scope e1
+            else
+                eval scope e2
 
         | MpClassConst (expr, props) ->
             let _, pos = expr
@@ -239,7 +242,7 @@ module internal Interpreter =
             match value with
             | MpClassValue (s, listProps, dictFunc) ->
                 if listProps.Length <> props.Length then
-                    raise (Exception(error pos "Class does not have correct parameters"))
+                    raise (Exception(error (pos, file) "Class does not have correct parameters"))
 
                 let q = Dictionary<identifier, value>()
 
@@ -247,22 +250,22 @@ module internal Interpreter =
                     List.map (fun i -> q[listProps[i]] <- (eval scope props[i])) [ 0 .. listProps.Length - 1 ]
 
                 MpObjectValue(s, q, dictFunc)
-            | _ -> raise (Exception(error pos "Expression is not class"))
+            | _ -> raise (Exception(error (pos, file) "Expression is not class"))
 
         | MpLambda (vars, block) ->
             let newVars = List.map fst vars
-            checkFuncVars vars functions classes
+            checkFuncVars vars file functions classes
             let globals = globalFunVars variables vars
-            MpFuncStaticValue("lambda", newVars, globals, block, (variables, functions, classes, Module modules))
+            MpFuncStaticValue("lambda", newVars, globals, block, (file, variables, functions, classes, Module modules))
 
         | MpSelf ->
             if not (variables.ContainsKey("self")) then
-                raise (Exception(error pos "Incorrect instruction self"))
+                raise (Exception(error (pos, file) "Incorrect instruction self"))
 
             variables["self"]
 
-    and comparison (pos: Position) lhs op rhs =
-        let x = compare pos lhs rhs
+    and comparison (posFile: Position * string) lhs op rhs =
+        let x = compare posFile lhs rhs
 
         match op with
         | MpEq -> x = 0
@@ -271,9 +274,9 @@ module internal Interpreter =
         | MpGt -> x > 0
         | MpLe -> x <= 0
         | MpGe -> x >= 0
-        |> fromObj pos
+        |> fromObj posFile
 
-    and arithmetic (pos: Position) lhs op rhs =
+    and arithmetic (pos: Position * string) lhs op rhs =
         match op, (lhs, rhs) with
         | MpAdd, (MpInt l, MpInt r) -> MpInt(l + r)
         | MpAdd, (MpChar l, MpChar r) -> MpChar(l + r)
@@ -293,14 +296,16 @@ module internal Interpreter =
         | MpArithmeticXor, (MpInt l, MpInt r) -> MpInt(l ^^^ r)
         | _ -> raise (Exception(error pos "Arithmetic operation is not supported"))
 
-    and logical (pos: Position) lhs op rhs =
+    and logical (posFile: Position * string) lhs op rhs =
         match op, lhs, rhs with
         | MpAnd, MpBool l, MpBool r -> MpBool(l && r)
         | MpOr, MpBool l, MpBool r -> MpBool(l || r)
         | MpXor, MpBool l, MpBool r -> MpBool((not l && r) || (not r && l))
-        | _, _, _ -> raise (Exception(error pos "Logical operation is not supported"))
+        | _, _, _ -> raise (Exception(error posFile "Logical operation is not supported"))
 
     and getProp (scope: ProgramScope) (value: value) (indices: property list) ind =
+        let _, (file, _, _, _, _), _ = scope
+
         let getValue v =
             if ind = indices.Length - 1 then
                 v
@@ -316,78 +321,80 @@ module internal Interpreter =
         match indices[ind] with
         | MpIndexA index ->
             let _, pos = index
-            let index = toInt pos (eval scope index)
+            let index = toInt (pos, file) (eval scope index)
 
             match value with
-            | MpArrayValue v -> getArray pos v index
+            | MpArrayValue v -> getArray (pos, file) v index
             | MpString v ->
                 if index < 0 || index >= v.Length then
-                    raise (Exception(error pos "Index out range"))
+                    raise (Exception(error (pos, file) "Index out range"))
 
                 if ind = 0 && indices.Length = 1 then
                     MpChar v[index]
                 else
-                    raise (Exception(error pos "The indexed value is not correct"))
-            | _ -> raise (Exception(error pos "The indexed value is not correct"))
+                    raise (Exception(error (pos, file) "The indexed value is not correct"))
+            | _ -> raise (Exception(error (pos, file) "The indexed value is not correct"))
 
         | MpIndexT (index, pos) ->
             match value with
-            | MpTupleValue v -> getArray pos v index
-            | _ -> raise (Exception(error pos "The property is not correct"))
+            | MpTupleValue v -> getArray (pos, file) v index
+            | _ -> raise (Exception(error (pos, file) "The property is not correct"))
 
         | MpProperty (prop, pos) ->
             match value with
-            | MpObjectValue (_, props, (v, f, c, m)) ->
+            | MpObjectValue (_, props, (file1, v, f, c, m)) ->
                 if f.ContainsKey(prop) && ind = indices.Length - 1 then
                     match f[prop] with
                     | Static (vars, g, b) ->
-                        let value = MpFuncStaticValue(prop, vars, g, b, (v, f, c, m))
+                        let value = MpFuncStaticValue(prop, vars, g, b, (file1, v, f, c, m))
                         getValue value
                     | Self (vars, g, b) ->
-                        let value = MpFuncSelfValue(prop, vars, g, b, (v, f, c, m), value)
+                        let value = MpFuncSelfValue(prop, vars, g, b, (file1, v, f, c, m), value)
                         getValue value
                 elif props.ContainsKey(prop) then
                     getValue props[prop]
                 elif v.ContainsKey(prop) then
                     getValue v[prop]
                 else
-                    raise (Exception(error pos "The property is not correct"))
-            | MpClassValue (_, _, (v, f, c, m)) ->
+                    raise (Exception(error (pos, file) "The property is not correct"))
+            | MpClassValue (_, _, (file1, v, f, c, m)) ->
                 if f.ContainsKey(prop) then
                     match f[prop] with
                     | Static (vars, g, b) ->
-                        let value = MpFuncStaticValue(prop, vars, g, b, (v, f, c, m))
+                        let value = MpFuncStaticValue(prop, vars, g, b, (file1, v, f, c, m))
                         getValue value
-                    | _ -> raise (Exception(error pos "The property is not correct"))
+                    | _ -> raise (Exception(error (pos, file) "The property is not correct"))
                 elif v.ContainsKey(prop) then
                     getValue v[prop]
                 else
-                    raise (Exception(error pos "The property is not correct"))
-            | MpModuleValue (_, (v, f, c, m)) ->
+                    raise (Exception(error (pos, file) "The property is not correct"))
+            | MpModuleValue (_, (file1, v, f, c, m)) ->
                 let m = getModule m
 
                 if f.ContainsKey(prop) then
                     match f[prop] with
                     | Static (vars, g, b) ->
-                        let value = MpFuncStaticValue(prop, vars, g, b, (v, f, c, Module m))
+                        let value = MpFuncStaticValue(prop, vars, g, b, (file1, v, f, c, Module m))
                         getValue value
-                    | _ -> raise (Exception(error pos "The property is not correct"))
+                    | _ -> raise (Exception(error (pos, file) "The property is not correct"))
                 elif v.ContainsKey(prop) then
                     getValue v[prop]
                 elif c.ContainsKey(prop) then
                     let l, (v, f) = c[prop]
-                    let value = MpClassValue(prop, l, (v, f, c, Module m))
+                    let value = MpClassValue(prop, l, (file1, v, f, c, Module m))
                     getValue value
                 elif m.ContainsKey(prop) then
                     let value = m[prop]
                     let value = MpModuleValue(prop, value)
                     getValue value
                 else
-                    raise (Exception(error pos "The property is not correct"))
+                    raise (Exception(error (pos, file) "The property is not correct"))
 
-            | _ -> raise (Exception(error pos "The property is not correct"))
+            | _ -> raise (Exception(error (pos, file) "The property is not correct"))
 
     and setProp (scope: ProgramScope) (value: value) (indices: property list) ind (e: value) =
+        let _, (file, _, _, _, _), _ = scope
+
         let setArray pos (v: value[]) index =
             if index < 0 || index >= v.Length then
                 raise (Exception(error pos "Index out range"))
@@ -400,17 +407,17 @@ module internal Interpreter =
         match indices[ind] with
         | MpIndexA index ->
             let _, pos = index
-            let index = toInt pos (eval scope index)
+            let index = toInt (pos, file) (eval scope index)
 
             match value with
-            | MpArrayValue v -> setArray pos v index
-            | _ -> raise (Exception(error pos "The indexed set is not correct"))
+            | MpArrayValue v -> setArray (pos, file) v index
+            | _ -> raise (Exception(error (pos, file) "The indexed set is not correct"))
 
-        | MpIndexT (_, pos) -> raise (Exception(error pos "The indexed set is not correct"))
+        | MpIndexT (_, pos) -> raise (Exception(error (pos, file) "The indexed set is not correct"))
 
         | MpProperty (prop, pos) ->
             match value with
-            | MpObjectValue (_, props, (v, _, _, _)) ->
+            | MpObjectValue (_, props, (_, v, _, _, _)) ->
                 if props.ContainsKey(prop) then
                     if ind = indices.Length - 1 then
                         props[prop] <- e
@@ -422,13 +429,13 @@ module internal Interpreter =
                     else
                         setProp scope v[prop] indices (ind + 1) e
                 else
-                    raise (Exception(error pos "The property is not correct"))
-            | _ -> raise (Exception(error pos "The property is not correct"))
+                    raise (Exception(error (pos, file) "The property is not correct"))
+            | _ -> raise (Exception(error (pos, file) "The property is not correct"))
 
     and mpRunAux (programScope: ProgramScope) =
         let (files, scope, program: instruction[]) = programScope
 
-        let (variables: VarLookup, functions: FunctionsLookup, classes: ClassLookup, modules: ModulesLookup) =
+        let (file, variables: VarLookup, functions: FunctionsLookup, classes: ClassLookup, modules: ModulesLookup) =
             scope
 
         let modules = getModule modules
@@ -447,7 +454,7 @@ module internal Interpreter =
                         || classes.ContainsKey(identifier)
                         || modules.ContainsKey(identifier)
                     then
-                        raise (Exception(error pos "There are two terms with the same name"))
+                        raise (Exception(error (pos, file) "There are two terms with the same name"))
 
                     variables[identifier] <- evalAux expr
                 | MpIdentProp (identifier, indices) ->
@@ -474,7 +481,9 @@ module internal Interpreter =
             let newClasses = ClassLookup()
             let newModules = Dictionary<identifier, Scope>()
 
-            let newScope = (newVariables, newFunctions, newClasses, Module newModules)
+            let newScope =
+                (identifier, newVariables, newFunctions, newClasses, Module newModules)
+
             let _ = mpRunAux (ProgramScope(files, newScope, block))
             modules.Add(identifier, newScope)
 
@@ -489,7 +498,7 @@ module internal Interpreter =
             | MpIf (cond, block) ->
                 let _, pos = cond
 
-                if toBool pos (evalAux cond) then
+                if toBool (pos, file) (evalAux cond) then
                     executeBlock block
                 else
                     Execute
@@ -497,7 +506,7 @@ module internal Interpreter =
             | MpElse (cond, blockIf, blockElse) ->
                 let _, pos = cond
 
-                if toBool pos (evalAux cond) then
+                if toBool (pos, file) (evalAux cond) then
                     executeBlock blockIf
                 else
                     executeBlock blockElse
@@ -506,9 +515,9 @@ module internal Interpreter =
                 let _, posIf = condIf
                 let _, posElIf = condElIf
 
-                if toBool posIf (evalAux condIf) then
+                if toBool (posIf, file) (evalAux condIf) then
                     executeBlock blockIf
-                elif toBool posElIf (evalAux condElIf) then
+                elif toBool (posElIf, file) (evalAux condElIf) then
                     executeBlock blockElIf
                 else
                     Execute
@@ -517,9 +526,9 @@ module internal Interpreter =
                 let _, posIf = condIf
                 let _, posElIf = condElIf
 
-                if toBool posIf (evalAux condIf) then
+                if toBool (posIf, file) (evalAux condIf) then
                     executeBlock blockIf
-                elif toBool posElIf (evalAux condElIf) then
+                elif toBool (posElIf, file) (evalAux condElIf) then
                     executeBlock blockElIf
                 else
                     executeBlock blockElse
@@ -531,20 +540,20 @@ module internal Interpreter =
 
                     match value with
                     | MpInt n -> n
-                    | _ -> raise (Exception(error pos "Cannot convert to int"))
+                    | _ -> raise (Exception(error (pos, file) "Cannot convert to int"))
 
                 let _, stop, step = (toIntAux initE, toIntAux stopE, toIntAux stepE)
 
                 let _ = assign (Set((MpVar(identifier), pos), initE))
 
                 let rec loop () =
-                    if toInt pos variables[identifier] >= stop then
+                    if toInt (pos, file) variables[identifier] >= stop then
                         Execute
                     else
 
                         match executeBlock block with
                         | Execute ->
-                            variables[identifier] <- arithmetic pos variables[identifier] MpAdd (MpInt step)
+                            variables[identifier] <- arithmetic (pos, file) variables[identifier] MpAdd (MpInt step)
                             loop ()
                         | Return v -> Return v
                         | Break (index, pos) ->
@@ -554,7 +563,7 @@ module internal Interpreter =
                                 Break(index - (uint8 1), pos)
                         | Continue (index, pos) ->
                             if index = uint8 0 then
-                                variables[identifier] <- arithmetic pos variables[identifier] MpAdd (MpInt step)
+                                variables[identifier] <- arithmetic (pos, file) variables[identifier] MpAdd (MpInt step)
                                 loop ()
                             else
                                 Continue(index - (uint8 1), pos)
@@ -565,7 +574,7 @@ module internal Interpreter =
                 let _, pos = condition
 
                 let rec loop () =
-                    if not (toBool pos (evalAux condition)) then
+                    if not (toBool (pos, file) (evalAux condition)) then
                         Execute
                     else
                         match executeBlock block with
@@ -607,22 +616,22 @@ module internal Interpreter =
                 Execute
 
             | MpFuncStatic ((identifier, pos), vars, block) ->
-                let _ = sameName pos identifier
+                let _ = sameName (pos, file) identifier
 
                 let globals = globalFunVars variables vars
                 let newVars = List.map fst vars
                 functions[identifier] <- Static(newVars, globals, block)
-                checkFuncVars vars functions classes
+                checkFuncVars vars file functions classes
 
                 Execute
 
             | MpFuncSelf ((identifier, pos), vars, block) ->
-                let _ = sameName pos identifier
+                let _ = sameName (pos, file) identifier
 
                 let globals = globalFunVars variables vars
                 let newVars = List.map fst vars
                 functions[identifier] <- Self(newVars, globals, block)
-                checkFuncVars vars functions classes
+                checkFuncVars vars file functions classes
 
                 Execute
 
@@ -633,7 +642,7 @@ module internal Interpreter =
             | MpContinue (index, pos) -> Continue(index, pos)
 
             | MpClass ((identifier, pos), vars) ->
-                let _ = sameName pos identifier
+                let _ = sameName (pos, file) identifier
 
                 classes[identifier] <- vars, (VarLookup(), FunctionsLookup())
 
@@ -643,7 +652,7 @@ module internal Interpreter =
 
             | MpImpl ((s, pos), block) ->
                 if not (classes.ContainsKey(s)) then
-                    raise (Exception(error pos "Class does not exist"))
+                    raise (Exception(error (pos, file) "Class does not exist"))
 
                 let _, (variables, functions) = classes[s]
 
@@ -653,19 +662,19 @@ module internal Interpreter =
                 let _ = List.map (fun x -> newModules[x] <- modules[x]) (List.ofSeq modules.Keys)
 
                 if functions.Count <> 0 then
-                    raise (Exception(error pos "There are two implementations for the same class"))
+                    raise (Exception(error (pos, file) "There are two implementations for the same class"))
 
                 let _ =
-                    mpRunAux (files, (variables, functions, newClasses, Module newModules), block)
+                    mpRunAux (files, (file, variables, functions, newClasses, Module newModules), block)
 
                 Execute
 
             | MpImplDeriving ((s1, p1), (s2, p2), block) ->
                 if not (classes.ContainsKey(s1)) then
-                    raise (Exception(error p1 "Class does not exist"))
+                    raise (Exception(error (p1, file) "Class does not exist"))
 
                 if not (classes.ContainsKey(s2)) then
-                    raise (Exception(error p2 "Class does not exist"))
+                    raise (Exception(error (p2, file) "Class does not exist"))
 
                 let l1, (v1, functions1) = classes[s1]
                 let l2, (v2, functions2) = classes[s2]
@@ -678,13 +687,14 @@ module internal Interpreter =
                 let _ = List.map (fun x -> v1[x] <- v2[x]) (List.ofSeq v2.Keys)
 
                 if functions.Count <> 0 then
-                    raise (Exception(error p1 "There are two implementations for the same class"))
+                    raise (Exception(error (p1, file) "There are two implementations for the same class"))
 
                 let checkProps x =
                     if List.contains x l1 then
-                        raise (Exception(error p1 "There are two properties with the same name"))
+                        raise (Exception(error (p1, file) "There are two properties with the same name"))
 
-                let _ = mpRunAux (files, (v1, functions1, newClasses, Module newModules), block)
+                let _ =
+                    mpRunAux (files, (file, v1, functions1, newClasses, Module newModules), block)
 
 
                 let checkFunc x =
@@ -698,14 +708,14 @@ module internal Interpreter =
 
                 Execute
 
-            | MpModule ((identifier, pos), block) -> instrModule pos identifier block
+            | MpModule ((identifier, pos), block) -> instrModule (pos, file) identifier block
 
             | MpImport (identifier, pos) ->
                 if (not (files.ContainsKey(identifier))) then
-                    raise (Exception(error pos $"The file {identifier}.ps does not exist"))
+                    raise (Exception(error (pos, file) $"The file {identifier}.ps does not exist"))
 
                 let block = files[identifier]
-                instrModule pos identifier block
+                instrModule (pos, identifier) identifier block
 
         and executeBlock block =
             let rec loop i =
@@ -727,7 +737,7 @@ module internal Interpreter =
                 match step program[i] with
                 | Execute -> loop (i + 1)
                 | Return v -> v
-                | Break (_, pos) -> raise (Exception(error pos "Incorrect instruction break"))
-                | Continue (_, pos) -> raise (Exception(error pos "Incorrect instruction continue"))
+                | Break (_, pos) -> raise (Exception(error (pos, file) "Incorrect instruction break"))
+                | Continue (_, pos) -> raise (Exception(error (pos, file) "Incorrect instruction continue"))
 
         loop 0

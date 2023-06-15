@@ -64,7 +64,7 @@ static class Program
             }
             catch (Exception e)
             {
-                Console.WriteLine(e.Message);
+                Console.WriteLine($"File {module}\n{e.Message}");
                 return null;
             }
         }

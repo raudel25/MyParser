@@ -40,7 +40,7 @@ and ClassLookup = Dictionary<identifier, identifier list * ScopeClass>
 
 and ModulesLookup = Module of Dictionary<identifier, Scope>
 
-and Scope = VarLookup * FunctionsLookup * ClassLookup * ModulesLookup
+and Scope = string * VarLookup * FunctionsLookup * ClassLookup * ModulesLookup
 
 and ScopeClass = VarLookup * FunctionsLookup
 

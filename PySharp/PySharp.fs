@@ -32,7 +32,7 @@ module PySharp =
         let files = Dictionary<identifier, instruction[]>()
 
         let _ =
-            mpRunAux (ProgramScope(files, (variables, functions, classes, Module modules), program))
+            mpRunAux (ProgramScope(files, ("main", variables, functions, classes, Module modules), program))
 
         ()
 
@@ -46,7 +46,7 @@ module PySharp =
         let structs = ClassLookup()
         let modules = Module(Dictionary<identifier, Scope>())
 
-        mpRunAux (ProgramScope(files, (variables, functions, structs, modules), program))
+        mpRunAux (ProgramScope(files, ("main", variables, functions, structs, modules), program))
 
     let mpToStr value = toStr value
 

@@ -5,8 +5,9 @@ open Microsoft.FSharp.Core
 open FParsec
 
 module internal LibraryFunc =
-    let error (pos: Position) (s: string) =
-        $"Error in Ln: {pos.Line} Col: {pos.Column}\n{s}"
+    let error (posFile: Position * string) (s: string) =
+        let pos, file = posFile
+        $"File {file}\nError in Ln: {pos.Line} Col: {pos.Column}\n{s}"
 
     let rec toStr value =
         let aux (x: value[]) =
@@ -51,11 +52,11 @@ module internal LibraryFunc =
         | MpModuleValue (x, _) -> $"module {x}"
 
 
-    let toChar pos value =
+    let toChar posFile value =
         match value with
         | MpInt n -> MpChar(char n)
         | MpChar c -> MpChar c
-        | _ -> raise (Exception(error pos "Cannot convert to char"))
+        | _ -> raise (Exception(error posFile "Cannot convert to char"))
 
     let printL (value: value) : value =
         match value with
@@ -80,7 +81,7 @@ module internal LibraryFunc =
 
         MpString s
 
-    let toInt pos value =
+    let toInt posFile value =
         try
             match value with
             | MpInt x -> MpInt x
@@ -93,9 +94,9 @@ module internal LibraryFunc =
             | _ -> raise (Exception())
 
         with _ ->
-            raise (Exception(error pos "Cannot convert from array to int"))
+            raise (Exception(error posFile "Cannot convert from array to int"))
 
-    let toDouble pos value =
+    let toDouble posFile value =
         try
             match value with
             | MpInt x -> MpDouble(double x)
@@ -107,13 +108,13 @@ module internal LibraryFunc =
             | MpNull -> MpDouble 0
             | _ -> raise (Exception())
         with _ ->
-            raise (Exception(error pos "Cannot convert to double"))
+            raise (Exception(error posFile "Cannot convert to double"))
 
-    let size pos value =
+    let size posFile value =
         match value with
         | MpArrayValue x -> MpInt x.Length
         | MpString x -> MpInt x.Length
-        | _ -> raise (Exception(error pos "The object do not have size property"))
+        | _ -> raise (Exception(error posFile "The object do not have size property"))
 
     let funcLib0 s =
         match s with
