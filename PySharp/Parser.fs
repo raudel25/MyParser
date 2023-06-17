@@ -33,7 +33,16 @@ module internal Parser =
     let reservedFunctions0 = [ "input" ]
 
     let reservedFunctions1 =
-        [ "printLn"; "printL"; "int"; "double"; "str"; "char"; "size" ]
+        [ "printLn"
+          "printL"
+          "int"
+          "double"
+          "str"
+          "char"
+          "array"
+          "tuple"
+          "size"
+          "type" ]
 
     let (>>%) p x = p |>> (fun _ -> x)
 
@@ -158,13 +167,16 @@ module internal Parser =
     let mpValue =
         [ mpInvoke
           mpReservedFunc
+          mpSlice
           mpIdentProp
           mpNum
           mpString
           mpNull
           mpVar
           mpBool
-          mpChar ]
+          mpChar
+          mpArray
+          mpTuple ]
         |> List.map attempt
         |> choice
 
@@ -246,12 +258,9 @@ module internal Parser =
         [ mpLambda
           mpClassConst
           mpTernary
-          mpSlice
           mpLogical
           mpComparison
           mpArithmetic
-          mpArray
-          mpTuple
           mpSelfExpr ]
         |> List.map attempt
         |> choice

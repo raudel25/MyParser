@@ -276,25 +276,35 @@ module internal Interpreter =
         | MpGe -> x >= 0
         |> fromObj posFile
 
-    and arithmetic (pos: Position * string) lhs op rhs =
+    and arithmetic (posFile: Position * string) lhs op rhs =
         match op, (lhs, rhs) with
         | MpAdd, (MpInt l, MpInt r) -> MpInt(l + r)
         | MpAdd, (MpChar l, MpChar r) -> MpChar(l + r)
         | MpAdd, (MpString l, x) -> MpString(l + toStr x)
         | MpAdd, (x, MpString r) -> MpString(toStr x + r)
+        | MpAdd, (MpArrayValue l, x) -> MpArrayValue(Array.append l (toArray x))
+        | MpAdd, (x, MpArrayValue r) -> MpArrayValue(Array.append (toArray x) r)
+        | MpAdd, (MpTupleValue l, x) -> MpTupleValue(Array.append l (toArray x))
+        | MpAdd, (x, MpTupleValue r) -> MpTupleValue(Array.append (toArray x) r)
         | MpAdd, AsDoubles (l, r) -> MpDouble(l + r)
         | MpSubtract, (MpInt l, MpInt r) -> MpInt(l - r)
         | MpSubtract, (MpChar l, MpChar r) -> MpChar(l - r)
         | MpSubtract, AsDoubles (l, r) -> MpDouble(l - r)
         | MpMultiply, (MpInt l, MpInt r) -> MpInt(l * r)
         | MpMultiply, AsDoubles (l, r) -> MpDouble(l * r)
+        | MpMultiply, (MpString l, x) -> MpString(String.concat "" (List.replicate (toInt posFile x) l))
+        | MpMultiply, (x, MpString r) -> MpString(String.concat "" (List.replicate (toInt posFile x) r))
+        | MpMultiply, (MpArrayValue l, x) -> MpArrayValue(Array.concat (Array.replicate (toInt posFile x) l))
+        | MpMultiply, (x, MpArrayValue r) -> MpArrayValue(Array.concat (Array.replicate (toInt posFile x) r))
+        | MpMultiply, (MpTupleValue l, x) -> MpTupleValue(Array.concat (Array.replicate (toInt posFile x) l))
+        | MpMultiply, (x, MpTupleValue r) -> MpTupleValue(Array.concat (Array.replicate (toInt posFile x) r))
         | MpDivide, (MpInt l, MpInt r) -> MpInt(l - r)
         | MpDivide, AsDoubles (l, r) -> MpDouble(l - r)
         | MpRest, (MpInt l, MpInt r) -> MpInt(l % r)
         | MpArithmeticAnd, (MpInt l, MpInt r) -> MpInt(l &&& r)
         | MpArithmeticOr, (MpInt l, MpInt r) -> MpInt(l ||| r)
         | MpArithmeticXor, (MpInt l, MpInt r) -> MpInt(l ^^^ r)
-        | _ -> raise (Exception(error pos "Arithmetic operation is not supported"))
+        | _ -> raise (Exception(error posFile "Arithmetic operation is not supported"))
 
     and logical (posFile: Position * string) lhs op rhs =
         match op, lhs, rhs with

@@ -110,6 +110,29 @@ module internal LibraryFunc =
         with _ ->
             raise (Exception(error posFile "Cannot convert to double"))
 
+    let toArray value =
+        match value with
+        | MpArrayValue x -> x
+        | MpTupleValue x -> x
+        | MpString x -> Array.map MpChar (Array.ofSeq x)
+        | _ -> List.toArray [ value ]
+
+    let toType value =
+        match value with
+        | MpInt _ -> "int"
+        | MpDouble _ -> "double"
+        | MpBool _ -> "bool"
+        | MpString _ -> "string"
+        | MpChar _ -> "char"
+        | MpNull -> "null"
+        | MpFuncStaticValue _ -> "static function"
+        | MpFuncSelfValue _ -> "self function"
+        | MpArrayValue _ -> "array"
+        | MpTupleValue _ -> "tuple"
+        | MpObjectValue _ -> "object"
+        | MpClassValue _ -> "class"
+        | MpModuleValue _ -> "module"
+
     let size posFile value =
         match value with
         | MpArrayValue x -> MpInt x.Length
@@ -129,5 +152,8 @@ module internal LibraryFunc =
         | "double" -> toDouble pos value
         | "str" -> MpString(toStr value)
         | "char" -> toChar pos value
+        | "array" -> MpArrayValue(toArray value)
+        | "tuple" -> MpTupleValue(toArray value)
         | "size" -> size pos value
+        | "type" -> MpString(toType value)
         | _ -> MpNull
