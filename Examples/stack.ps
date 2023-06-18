@@ -1,0 +1,24 @@
+import node
+
+class Stack{n, len}
+
+impl Stack{
+    func new() => Stack{null, 0}
+
+    func push(self, value){
+        n = node.Node.new(value);
+
+        if(self.n != null){
+            n.next = self.n;
+            self.n.preview = n;
+        }
+
+        self.n = n;
+    }
+
+    func pop(self){
+        self.n = self.n.next;
+    }
+
+    func top(self) => self.n.value
+}

@@ -1,0 +1,30 @@
+class List{arr, len}
+
+impl List{
+    func new(){
+        return List{[0, 0], 0};
+    }
+
+    func add(self, x){
+        self.arr[self.len] = x;
+        self.len += 1;
+
+        if(size(self.arr) == self.len){
+            self.arr = self.arr + [0; self.len];
+        }
+    }
+
+    func remove(self, i){
+        self.arr = self.arr[0:i] + self.arr[i+1:size(self.arr)] + [0];
+    }
+
+    func get(self, i){
+        return self.arr[i];
+    }
+
+    func set(self, i, x){
+        self.arr[i] = x;
+    }
+}
+
+    

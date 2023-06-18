@@ -1,0 +1,86 @@
+import list
+import stack
+import figure
+
+func getStack() => stack.Stack
+
+func getList() => list.List
+
+func getGcd(){
+    func gcd(x, y){
+        while (y != 0)
+        {
+            r = x % y;
+            x = y;
+            y = r;
+        }
+
+        return x;
+    }
+
+    return gcd;
+}
+
+func qqq(q){
+
+    if(q==0) return;
+    qqq(q-1);
+
+    printLn(q);
+}
+
+func mergeSort(nList)
+{
+    if (size(nList) > 1)
+    {
+        mid = size(nList) / 2;
+        leftHalf = nList[0:mid];
+        rightHalf = nList[mid:size(nList)];
+
+        mergeSort(leftHalf);
+        mergeSort(rightHalf);
+
+        
+        i=0; j=0; k=0;       
+        while (i < size(leftHalf) and j < size(rightHalf))
+        {
+            if (leftHalf[i] < rightHalf[j])
+            {
+                nList[k]=leftHalf[i];
+                i=i+1;
+            }
+            else
+            {
+                nList[k]=rightHalf[j];
+                j=j+1;
+            }
+            k=k+1;
+        }
+
+        while (i < size(leftHalf))
+        {
+            nList[k]=leftHalf[i];
+            i=i+1;
+            k=k+1;
+        }
+
+        while (j < size(rightHalf))
+        {
+            nList[k]=rightHalf[j];
+            j=j+1;
+            k=k+1;
+        }
+    }
+    
+    return nList;
+}
+
+l = getList();
+l = l.new();
+s = figure.Square.new(2);
+
+gcd = getGcd();
+
+q = [1,2,-2,0,12,13,1];
+
+printLn(mergeSort(q));

@@ -16,7 +16,7 @@ module internal Interpreter =
         | :? string as x -> MpString x
         | :? char as x -> MpChar x
         | null -> MpNull
-        | x -> raise (Exception(error posFile (x.ToString())))
+        | _ -> raise (Exception(error posFile "Comparison cannot be performed"))
 
     let toInt (posFile: Position * string) =
         let f x =
@@ -51,7 +51,10 @@ module internal Interpreter =
         | AsDoubles (l, r) -> l.CompareTo(r)
         | MpString l, MpString r -> l.CompareTo(r)
         | MpChar l, MpChar r -> l.CompareTo(r)
-        | _ -> raise (Exception(error posFile $"%A{lhs} %A{rhs}"))
+        | MpNull, MpNull -> 0
+        | MpNull, _ -> 1
+        | _, MpNull -> -1
+        | _ -> raise (Exception(error posFile "Comparison cannot be performed"))
 
     let globalFunVars (variables: VarLookup) vars =
         let contains var =
@@ -298,8 +301,8 @@ module internal Interpreter =
         | MpMultiply, (x, MpArrayValue r) -> MpArrayValue(Array.concat (Array.replicate (toInt posFile x) r))
         | MpMultiply, (MpTupleValue l, x) -> MpTupleValue(Array.concat (Array.replicate (toInt posFile x) l))
         | MpMultiply, (x, MpTupleValue r) -> MpTupleValue(Array.concat (Array.replicate (toInt posFile x) r))
-        | MpDivide, (MpInt l, MpInt r) -> MpInt(l - r)
-        | MpDivide, AsDoubles (l, r) -> MpDouble(l - r)
+        | MpDivide, (MpInt l, MpInt r) -> MpInt(l / r)
+        | MpDivide, AsDoubles (l, r) -> MpDouble(l / r)
         | MpRest, (MpInt l, MpInt r) -> MpInt(l % r)
         | MpArithmeticAnd, (MpInt l, MpInt r) -> MpInt(l &&& r)
         | MpArithmeticOr, (MpInt l, MpInt r) -> MpInt(l ||| r)
