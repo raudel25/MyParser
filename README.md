@@ -40,3 +40,6 @@ código puede usar el comando `init` y para finalizar un bloque `end`. Para fina
 
 ## Lenguaje
 Los detalles del lenguaje los puede encontrar en la <a href="https://github.com/raudel25/PySharp/wiki/Lenguaje">wiki</a> del repositorio.
+
+### Ejemplos
+Puede encontrar ejemplos de código en el siguiente <a href="https://github.com/raudel25/PySharp/tree/main/Examples">enlace</a>.
